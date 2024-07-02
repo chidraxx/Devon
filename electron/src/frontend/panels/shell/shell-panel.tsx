@@ -1,21 +1,50 @@
 import { Terminal as XtermTerminal } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
-import { useEffect, useRef, useState } from 'react'
-import type { Message } from '@/lib/types'
+import { useEffect, useRef } from 'react'
+import { SessionMachineContext } from '@/contexts/session-machine-context'
+import { shallowEqual } from '@xstate/react'
 
 /**
  * The terminal's content is set by write messages. To avoid complicated state logic,
  * we keep the terminal persistently open as a child of <App /> and hidden when not in use.
  */
 
+
+type ShellCommand = {
+    command: string
+    response: string
+}
+
 export default function ShellPanel({
-    messages,
+    path,
 }: {
-    messages: Message[]
+    // messages: Message[]
+    path: string
 }): JSX.Element {
     const terminalRef = useRef<HTMLDivElement>(null)
     const terminalInstanceRef = useRef<XtermTerminal | null>(null)
-    const [renderedMessages, setRenderedMessages] = useState<Message[]>([])
+    // const [renderedMessages, setRenderedMessages] = useState<ShellCommand[]>([])
+    let renderedMessages: ShellCommand[] = []
+    const initialPathRef = useRef<string | null>(null)
+    const messages = SessionMachineContext.useSelector(state =>
+        state.context.serverEventContext.messages.filter(
+            message => message.type === 'shellCommand' || message.type === 'shellResponse'
+        ),
+        shallowEqual
+    )
+    useEffect(() => {
+        // When the path changes, reset states
+        if (
+            initialPathRef.current === null ||
+            path !== initialPathRef.current
+        ) {
+            renderedMessages = []
+            if (terminalInstanceRef.current) {
+                terminalInstanceRef.current.clear()
+            }
+            initialPathRef.current = path
+        }
+    }, [path])
 
     useEffect(() => {
         async function addOn() {
@@ -59,36 +88,36 @@ export default function ShellPanel({
         }
     }, [])
 
+    function removeBeforeRunningCommand(input: string): string {
+        const regex = /.*Running Command:\s*/i
+        return input.replace(regex, '')
+    }
+
     useEffect(() => {
         const terminal = terminalInstanceRef.current
         if (terminal) {
-            const messagesToRender = messages.filter(
-                message => !renderedMessages.includes(message)
-            )
+            const messagesToRender = messages.reduce((acc, message) => {
+                if (message.type === 'shellCommand') {
+                    acc.push({ command: message.text, response: '' });
+                } else if (acc.length > 0) {
+                    acc[acc.length - 1].response += message.text;
+                }
+                return acc;
+            }, [] as ShellCommand[])
+            console.log(messagesToRender, renderedMessages)
+            terminal.clear()
             // terminal.clear() // Clear the existing content
             messagesToRender.forEach((message, idx) => {
-                let [command, response] = message.text.split('|START_RESPONSE|')
-                let commandMsgs = command.trim().split('\n')
+                console.log(message)
+                const {command, response} = message
+                // console.log("pusing", command, response)
+                renderedMessages.push({ command, response })
+                // console.log("after push",renderedMessages)
+
+                let commandMsgs = removeBeforeRunningCommand(
+                    command.trim()
+                ).split('\n')
                 commandMsgs.forEach((line, index) => {
-                    if (index === 0) {
-                        const firstLineItems = line.trim().split(' ')
-                        let end: string | undefined = undefined
-
-                        // Check if the last item in the first line is "<<<"
-                        if (
-                            firstLineItems[firstLineItems.length - 1] === '<<<'
-                        ) {
-                            end = firstLineItems.pop() // Remove the "<<<"
-                        }
-
-                        // Construct the command string
-                        line = firstLineItems.join(' ')
-                        if (end) {
-                            terminal.writeln(line)
-                            terminal.writeln(end)
-                            return
-                        }
-                    }
                     terminal.writeln(line)
                 })
                 if (response) {
@@ -96,14 +125,14 @@ export default function ShellPanel({
                     responseMsgs.forEach(line => {
                         terminal.writeln(line)
                     })
+                    terminal.write('> ')
                 }
-                setRenderedMessages(prevMessages => [...prevMessages, message])
             })
         }
-    }, [messages, renderedMessages])
+    }, [messages])
 
     return (
-        <div className="h-full flex flex-col bg-midnight">
+        <div className="h-full flex flex-col bg-midnight toned-text-color leading-relaxed">
             <div
                 id="terminal-wrapper"
                 className="flex-grow flex bg-midnight w-full px-3 pr-[1px] pt-4 overflow-hidden border-t border-outlinecolor"

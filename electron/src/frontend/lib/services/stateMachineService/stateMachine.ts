@@ -41,6 +41,9 @@ type ServerEvent = {
         | 'Error'
         | 'UserResponse'
         | 'GitEvent'
+        | 'ShellRequest'
+        | 'ShellResponse'
+        | 'RateLimit'
     content: any
     identifier: string | null
 }
@@ -88,6 +91,30 @@ export const eventHandlingLogic = fromTransition(
                     messages: [
                         ...state.messages,
                         { text: content.thought, type: 'thought' } as Message,
+                    ],
+                }
+            }
+            case 'ShellRequest': {
+                return {
+                    ...state,
+                    messages: [
+                        ...state.messages,
+                        {
+                            text: event.content,
+                            type: 'shellCommand',
+                        } as Message,
+                    ],
+                }
+            }
+            case 'ShellResponse': {
+                return {
+                    ...state,
+                    messages: [
+                        ...state.messages,
+                        {
+                            text: event.content,
+                            type: 'shellResponse',
+                        } as Message,
                     ],
                 }
             }
@@ -148,6 +175,16 @@ export const eventHandlingLogic = fromTransition(
                     ],
                 }
             }
+            case 'RateLimit': {
+                return {
+                    ...state,
+                    messages: [
+                        ...state.messages,
+                        { text: event.content, type: 'rateLimit' } as Message,
+                    ],
+                    modelLoading: false,
+                }
+            }
             case 'Error': {
                 console.error(event.content)
                 return {
@@ -156,6 +193,7 @@ export const eventHandlingLogic = fromTransition(
                         ...state.messages,
                         { text: event.content, type: 'error' } as Message,
                     ],
+                    modelLoading: false,
                 }
             }
             case 'GitEvent': {
@@ -219,7 +257,6 @@ export const eventSourceActor = fromCallback<
     { host: string; name: string }
 >(({ input, receive, sendBack }) => {
     let eventStream: EventSource | null = null
-
     const eventHandler = ({ data }: { data: any }) => {
         sendBack({ type: 'serverEvent', payload: JSON.parse(data) })
     }
@@ -229,6 +266,7 @@ export const eventSourceActor = fromCallback<
             eventStream = new EventSource(
                 `${input.host}/sessions/${input.name}/events/stream`
             )
+
             eventStream.addEventListener('message', eventHandler)
         }
         if (event.type === 'reset') {
@@ -819,7 +857,7 @@ export const newSessionMachine = setup({
                                     context.serverEventContext.userRequest,
                             })
                         },
-                        log('sending message'),
+                        log('Sending message'),
                     ],
                 },
                 'session.toggle': {

@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
     Paperclip,
     ArrowRight,
@@ -6,12 +6,15 @@ import {
     Axis3DIcon,
     CirclePlay,
 } from 'lucide-react'
-import { AutoresizeTextarea } from '@/components/ui/textarea'
+import HighlightKeywordInputField from '@/components/ui/highlight-keyword-input-field'
 import { useEnterSubmit } from '@/panels/chat/lib/hooks/chat.use-enter-submit'
 import SelectProjectDirectoryModal from '@/components/modals/select-project-directory-modal'
 import AtomLoader from '@/components/ui/atom-loader/atom-loader'
 import { SessionMachineContext } from '@/contexts/session-machine-context'
 import { useBackendUrl } from '@/contexts/backend-url-context'
+import { useAtom } from 'jotai'
+import { selectedCodeSnippetAtom } from '@/panels/editor/components/code-editor'
+import CodeSnippet, { ICodeSnippet, codeSnippetsAtom } from '../ui/code-snippet'
 
 const ChatInputField = ({
     isAtBottom,
@@ -33,12 +36,74 @@ const ChatInputField = ({
     const { formRef, onKeyDown } = useEnterSubmit()
     const inputRef = useRef<HTMLTextAreaElement>(null)
     const [input, setInput] = useState('')
+    const [selectedCodeSnippet, setSelectedCodeSnippet] =
+        useAtom<ICodeSnippet | null>(selectedCodeSnippetAtom)
+    const [codeSnippets, setCodeSnippets] = useAtom(codeSnippetsAtom)
+    const prevProjectPath = useRef<string>('')
+
     // For blocking user with modal
     // const searchParams = useSearchParams()
     const [openProjectModal, setOpenProjectModal] = useState(false)
     const { backendUrl } = useBackendUrl()
 
     const sessionActorRef = SessionMachineContext.useActorRef()
+    const projectPath = SessionMachineContext.useSelector(
+        state => state?.context?.sessionState?.path
+    )
+
+    useEffect(() => {
+        if (!prevProjectPath.current) {
+            prevProjectPath.current = projectPath
+        } else if (prevProjectPath.current !== projectPath) {
+            // Clear Jotai snippets
+            setCodeSnippets([])
+            setInput('')
+            prevProjectPath.current = projectPath
+        }
+    }, [projectPath])
+
+    function addSnippetToInputField(snippet: ICodeSnippet) {
+        const textarea = inputRef.current
+        if (textarea && typeof textarea.selectionStart === 'number') {
+            const { selectionStart, selectionEnd } = textarea
+            const newInput =
+                input.slice(0, selectionStart) +
+                ` @${snippet.id} ` +
+                input.slice(selectionEnd)
+            setInput(newInput)
+            textarea.focus()
+        }
+    }
+
+    useEffect(() => {
+        if (selectedCodeSnippet) {
+            // Check if it already exists
+            const existingSnippet = codeSnippets.find(
+                snippet => snippet.id === selectedCodeSnippet.id
+            )
+            if (!existingSnippet) {
+                setCodeSnippets(prev => [...prev, selectedCodeSnippet])
+                const textarea = inputRef.current
+                if (textarea && typeof textarea.selectionStart === 'number') {
+                    const { selectionStart, selectionEnd } = textarea
+                    const newInput =
+                        input.slice(0, selectionStart) +
+                        ` @${selectedCodeSnippet.id} ` +
+                        input.slice(selectionEnd)
+                    setInput(newInput)
+                    textarea.focus()
+                } else {
+                    setInput(
+                        prevInput => prevInput + ` @${selectedCodeSnippet.id} `
+                    )
+                }
+            }
+        }
+    }, [selectedCodeSnippet])
+
+    const handleRemoveSnippet = (id: string) => {
+        setCodeSnippets(prev => prev.filter(snippet => snippet.id !== id))
+    }
 
     async function submitUserMessage(value: string) {
         sessionActorRef.send({ type: 'session.sendMessage', message: value })
@@ -57,9 +122,13 @@ const ChatInputField = ({
         // checkShouldOpenModal()
     }
 
+    // console.log(sessionActorRef.getSnapshot().value,sessionActorRef.getSnapshot().matches('paused'))
+
     async function handlePause() {
         sessionActorRef.send({ type: 'session.toggle' })
     }
+
+    // console.log("loading ", loading)
 
     return (
         <div
@@ -80,6 +149,12 @@ const ChatInputField = ({
                     pauseHandler={handlePause}
                 />
             )}
+
+            <CodeSnippet
+                snippets={codeSnippets}
+                onClose={handleRemoveSnippet}
+                onClickHeader={addSnippetToInputField}
+            />
             {!viewOnly && (
                 <>
                     <form
@@ -100,20 +175,23 @@ const ChatInputField = ({
 
                             const res = await submitUserMessage(value)
 
-                            scrollToBottom()
+                            // Let loading message render first
+                            setTimeout(() => {
+                                scrollToBottom()
+                            }, 500)
                         }}
                     >
                         <div className="relative">
-                            <AutoresizeTextarea
-                                ref={inputRef}
+                            <HighlightKeywordInputField
+                                innerRef={inputRef}
                                 placeholder="Send a message to Devon ..."
                                 onFocus={handleFocus}
                                 onBlur={() => setFocused(false)}
-                                rows={1}
                                 onKeyDown={onKeyDown}
                                 value={input}
                                 onChange={e => setInput(e.target.value)}
                                 disabled={loading}
+                                codeSnippets={codeSnippets}
                             />
                             {/* <button
                                 onClick={toast}
@@ -190,15 +268,18 @@ const InformationBox = ({
     let currentType
     if (loading) {
         currentType = types.loading
+    } else if (paused) {
+        // console.log("type is paused")
+        currentType = types.paused
     } else if (modelLoading) {
         currentType = types.modelLoading
     } else if (userRequested) {
         currentType = types.userRequested
-    } else if (paused) {
-        currentType = types.paused
     } else {
         currentType = types.loading
     }
+
+    // console.log(currentType)
 
     return (
         <div className="bg-fade-bottom-to-top2 py-5 px-1">

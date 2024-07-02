@@ -84,7 +84,7 @@ class CodeGoTo(Tool):
 
     @property
     def name(self):
-        return "code_goto"
+        return "go_to_definition_or_references"
 
     @property
     def supported_formats(self):
@@ -109,18 +109,19 @@ class CodeGoTo(Tool):
                 return self.function.__doc__
             case "manpage":
                 return """
-    CODE_GOTO(1)                   General Commands Manual                  CODE_GOTO(1)
+    GO_TO_DEFINITION_OR_REFERENCES(1)                   General Commands Manual                  GO_TO_DEFINITION_OR_REFERENCES(1)
 
     NAME
-            code_goto - find symbol's definition or all references and get a list of all the positions within the codebase
+            go_to_definition_or_references - find symbol's definition or all references and get a list of all the positions within the codebase
 
     SYNOPSIS
-            code_goto FILE_PATH LINE_NUMBER SYMBOL_STRING
+            go_to_definition_or_references FILE_PATH LINE_NUMBER SYMBOL_STRING
 
     DESCRIPTION
-            The code_goto command navigates to the specified symbol's definition or reference within the project files by using ast tree
+            The go_to_definition_or_references command navigates to the specified symbol's definition or reference within the project files by using ast tree
             and returns a lists all positions of the symbol in the rest of the codebase. To find reference, use it on a definition. To find definition, use it on reference.
-            This is not a simple sting matching
+            This is not a simple string matching. If you want to see the definition of a function or a class, use this. If you want to see references of a function or class, use this.
+            Use it to find all the function calls.
 
     OPTIONS
             FILE_PATH
@@ -133,23 +134,25 @@ class CodeGoTo(Tool):
                     The symbol string to navigate to and search for within the project files.
 
     RETURN VALUE
-            The code_goto command returns a string of all positions of the symbol in the rest of the codebase.
+            The go_to_definition_or_references command returns a string of all positions of the symbol in the rest of the codebase.
 
     EXAMPLES
             To navigate to a symbol "my_function" in file "example.py" at line 42 and find its positions:
 
-                    code_goto "example.py" 42 "my_function"
+                    go_to_definition_or_references "example.py" 42 "my_function"
     """
             case _:
                 raise ValueError(f"Invalid format: {format}")
 
     def function(self, ctx: ToolContext, file_path: str, line_number: int, symbol_string: str) -> str:
         """
-        command_name: code_goto
+        command_name: go_to_definition_or_references
         description: Navigates to the specified symbol's definition or reference within the code base
                     and lists all positions of the symbol in the rest of the codebase.
-        signature: code_goto [FILE_PATH] [LINE_NUMBER] [SYMBOL_STRING]
-        example: `code_goto "example.py" 42 "my_function"`
+                    Use it to find all the locations where the function or class is being called.
+                    If you want to see the definition of a function or a class, use this. If you want to see references of a function or class, use this.
+        signature: go_to_definition_or_references [FILE_PATH] [LINE_NUMBER] [SYMBOL_STRING]
+        example: `go_to_definition_or_references "example.py" 42 "my_function"`
         """
         try:
 

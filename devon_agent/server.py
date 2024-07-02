@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from time import sleep
 from typing import Any, Dict, List, Optional
+from devon_agent.agents.conversational_agent import ConversationalAgent
 from devon_agent.semantic_search.code_graph_manager import CodeGraphManager
 
 import fastapi
@@ -21,12 +22,14 @@ from devon_agent.session import Session, SessionArguments
 import chromadb
 
 from devon_agent.utils import decode_path, encode_path
+from urllib.parse import unquote
+
 # API
 # SESSION
 # - get sessions
 # - create session
 # - start session
-# repond session
+# respond session
 # interrupt session
 # stop session
 # delete session
@@ -87,7 +90,7 @@ async def lifespan(app: fastapi.FastAPI):
                 k: Session.from_dict(v, lambda: get_user_input(k), persist=True)
                 for (k, v) in data.items()
             }
-            # sessions = data
+            sessions = data
             # for k, v in sessions.items():
                 # v.setup()
                 # background_tasks.add_task(v.run_event_loop)
@@ -120,11 +123,31 @@ def read_root():
 @app.get("/indexes")
 def get_indexes():
     client = chromadb.PersistentClient(path=os.path.join(app.db_path, "vectorDB"))
-    print(client.list_collections())
-    return [
+    
+    # Get completed indexes from ChromaDB
+    completed_indexes = [
         decode_path(collection.name)
         for collection in client.list_collections()
     ]
+    
+    # Decode the keys from index_tasks
+    in_progress_indexes = [unquote(key).replace("%2F", "/") for key in index_tasks.keys()]
+    
+    # Combine completed indexes with in-progress indexes
+    all_indexes = set(completed_indexes + in_progress_indexes)
+    
+    # Create a list of dictionaries with index information
+    index_info = []
+    for index in all_indexes:
+        # For in-progress tasks, we need to re-encode the path to check in index_tasks
+        encoded_index = index.replace("/", "%2F")
+        status = index_tasks.get(encoded_index, "done")  # If not in index_tasks, it's completed
+        index_info.append({
+            "path": index,
+            "status": status
+        })
+    
+    return index_info
 
 index_tasks = {}
 
@@ -176,6 +199,7 @@ def delete_index(index: str):
 @app.get("/sessions")
 def get_sessions():
     # TODO: figure out the right information to send
+    print(sessions.keys())
     return [
         {"name": session_name, "path": session_data.base_path}
         for session_name, session_data in sessions.items()
@@ -197,14 +221,15 @@ def create_session(
             status_code=400, detail=f"Session with id {session} already exists"
         )
 
-    agent = TaskAgent(name="Devon", temperature=0.0, args=config)
+    agent = ConversationalAgent(name="Devon", temperature=0.0, args=config)
 
     sessions[session] = Session(
         SessionArguments(
-            path, user_input=lambda: get_user_input(session), name=session,db_path=app.db_path if app.db_path else "."
+            path, user_input=lambda: get_user_input(session), name=session,db_path=app.db_path if app.db_path else ".",        versioning="fossil"
         ),
         agent,
         app.persist,
+
     )
 
     sessions[session].init_state()
@@ -241,7 +266,7 @@ def start_session(
     session_obj = sessions.get(session)
     session_obj.agent.api_key = api_key
     if session not in running_sessions:
-        session.setup()
+        session_obj.setup()
         background_tasks.add_task(sessions[session].run_event_loop)
         running_sessions.append(session)
 

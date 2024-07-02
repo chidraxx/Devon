@@ -1,10 +1,11 @@
-export type File = {
+export type File<T = any> = {
     id: string
     name: string
     path: string
     language: string
-    value: any
+    value: T
     icon?: string
+    agentHasOpen?: boolean
 }
 
 export type Model = {
@@ -16,5 +17,5 @@ export type Model = {
 
 export type Message = {
     text: string
-    type: 'user' | 'agent' | 'command' | 'tool' | 'task' | 'thought' | 'error'
+    type: 'user' | 'agent' | 'command' | 'tool' | 'task' | 'thought' | 'error' | 'shellCommand' | 'shellResponse' | 'rateLimit'
 }

@@ -42,7 +42,7 @@
 
     .dark {
         color: white;
-        --background: #1e1e1e;
+        --background: #16161c;
         --foreground: hsl(210 40% 98%);
 
         --card: var(--dark-primary-background);
@@ -78,9 +78,7 @@
     }
     body {
         @apply bg-background text-foreground;
-        font-feature-settings:
-            'rlig' 1,
-            'calt' 1;
+        font-feature-settings: 'rlig' 1, 'calt' 1;
     }
 
     html {
@@ -118,11 +116,49 @@
     }
 
     */
+
+    .horizontal-scrollbar {
+        position: relative;
+        overflow-x: auto;
+    }
+
+    .horizontal-scrollbar::after {
+        content: '';
+        display: block;
+        height: 0px;
+        background: #1e1e1e;
+    }
+
+    .horizontal-scrollbar::-webkit-scrollbar {
+        height: 3px;
+        background-color: #1e1e1e;
+        position: absolute;
+    }
+
+    .horizontal-scrollbar::-webkit-scrollbar-thumb {
+        background-color: transparent;
+        border-radius: 4px;
+        transition: background-color 0.3s ease, opacity 0.3s ease;
+        opacity: 0;
+    }
+
+    .group:hover .horizontal-scrollbar::-webkit-scrollbar-thumb {
+        background-color: rgba(131, 131, 131, 0.5);
+        opacity: 1;
+    }
+
+    .horizontal-scrollbar::-webkit-scrollbar-track {
+        background-color: transparent;
+    }
 }
 
 @layer components {
     .smooth-hover {
         @apply transition duration-200 hover:bg-gray-100 dark:hover:bg-batman;
+    }
+
+    .smooth-hover-2 {
+        @apply transition duration-200 hover:bg-gray-100 dark:hover:bg-[#191919];
     }
 
     .text-ellipsis {
@@ -136,7 +172,11 @@
     .bg-fade-bottom-to-top {
         /* TODO don't hardcode color */
         /* background-image: linear-gradient(to top, #2e2e2e 0%, transparent 100%); */
-        background-image: linear-gradient(to top, #1e1e1e 0%, transparent 100%);
+        background-image: linear-gradient(
+            to top,
+            var(--background) 0%,
+            transparent 100%
+        );
     }
 
     .bg-fade-bottom-to-top2 {
@@ -144,7 +184,7 @@
         /* background-image: linear-gradient(to top, #2e2e2e 50%, transparent 100%); */
         background-image: linear-gradient(
             to top,
-            #1e1e1e 50%,
+            var(--background) 50%,
             transparent 100%
         );
     }
@@ -152,7 +192,11 @@
     .bg-fade-bottom-to-top-midnight {
         /* TODO don't hardcode color */
         /* background-image: linear-gradient(to top, #2e2e2e 50%, transparent 100%); */
-        background-image: linear-gradient(to top, #1e1e1e 0%, #111111 80%);
+        background-image: linear-gradient(
+            to top,
+            var(--background) 0%,
+            #111111 80%
+        );
     }
 }
 
@@ -162,4 +206,12 @@
 
 .no-drag {
     -webkit-app-region: no-drag;
+}
+
+.chat-text-relaxed {
+    @apply text-neutral-100 leading-7 tracking-[0.025em];
+}
+
+.toned-text-color {
+    @apply text-neutral-200;
 }

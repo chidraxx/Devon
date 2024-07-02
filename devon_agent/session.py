@@ -6,34 +6,35 @@ import os
 import time
 import traceback
 from dataclasses import dataclass
-from typing import Any, List, Optional
+from typing import Any, List, Literal, Optional
+from devon_agent.agents.conversational_agent import ConversationalAgent
 
 
 from devon_agent.agents.default.agent import AgentArguments, TaskAgent
 from devon_agent.environment import LocalEnvironment, UserEnvironment
+from devon_agent.fossil_versioning import FossilVersioning
 from devon_agent.models import _delete_session_util, _save_session_util
 from devon_agent.telemetry import Posthog, SessionStartEvent
 from devon_agent.tool import ToolNotFoundException
 from devon_agent.tools import parse_command
+from devon_agent.tools.editorblock import EditBlockTool
 from devon_agent.tools.editortools import (CreateFileTool, DeleteFileTool,
                                            OpenFileTool, ScrollDownTool,
                                            ScrollToLineTool, ScrollUpTool,
                                            save_create_file, save_delete_file)
-from devon_agent.tools.edittools import EditFileTool, save_edit_file
 from devon_agent.tools.filesearchtools import FindFileTool, GetCwdTool, SearchDirTool
 from devon_agent.tools.filetools import SearchFileTool
-from devon_agent.tools.filesearchtools import FindFileTool, GetCwdTool, ListDirsRecursiveTool, SearchDirTool
+from devon_agent.tools.filesearchtools import FindFileTool, GetCwdTool, SearchDirTool
 from devon_agent.tools.filetools import SearchFileTool, FileTreeDisplay
-from devon_agent.tools.lifecycle import NoOpTool, SubmitTool
+from devon_agent.tools.lifecycle import NoOpTool
 from devon_agent.tools.shelltool import ShellTool
-from devon_agent.tools.usertools import AskUserTool, SetTaskTool
-from devon_agent.tools.utils import get_ignored_files
+from devon_agent.tools.usertools import AskUserTool, RespondUserTool
+from devon_agent.tools.utils import get_ignored_files, read_file
 from devon_agent.utils import DotDict, Event, decode_path
-from devon_agent.vgit import  get_current_diff, get_last_commit, get_or_create_repo, make_new_branch, safely_revert_to_commit, stash_and_commit_changes, subtract_diffs
 from devon_agent.tools.codenav import CodeGoTo, CodeSearch
-from devon_agent.tools.semantic_search import SemanticSearch
 
-import chromadb
+
+# import chromadb
 
 @dataclass(frozen=False)
 class SessionArguments:
@@ -45,6 +46,7 @@ class SessionArguments:
     task: Optional[str] = None
     # config: Optional[Dict[str, Any]] = None
     headless: Optional[bool] = False
+    versioning : Optional[Literal["git", "fossil"]] = None
   
 
 
@@ -125,7 +127,7 @@ class Session:
 
         self.status = "paused"
 
-        self.client = chromadb.PersistentClient(path=os.path.join(args.db_path, "vectorDB"))
+        # self.client = chromadb.PersistentClient(path=os.path.join(args.db_path, "vectorDB"))
 
         self.db_path = args.db_path
 
@@ -138,28 +140,29 @@ class Session:
                 "scroll_down": ScrollDownTool(),
                 "scroll_to_line": ScrollToLineTool(),
                 "search_file": SearchFileTool(),
-                "edit_file": EditFileTool().register_post_hook(save_edit_file),
+                # "edit_file": EditFileTool().register_post_hook(save_edit_file),
+                "edit": EditBlockTool(),
                 "search_dir": SearchDirTool(),
                 "find_file": FindFileTool(),
                 "get_cwd": GetCwdTool(),
                 "no_op": NoOpTool(),
-                "submit": SubmitTool(),
+                # "submit": SubmitTool(),
                 "delete_file": DeleteFileTool().register_post_hook(save_delete_file),
                 "code_search": CodeSearch(),
-                "code_goto": CodeGoTo(),
+                "go_to_definition_or_references": CodeGoTo(),
                 "file_tree_display": FileTreeDisplay(),
             }
         )
         local_environment.set_default_tool(ShellTool())
 
         # for collection in self.client.list_collections():
-        #     # print(collection.name,collection.name.replace("_", "/")[1:],self.base_path)
-        #     if decode_path(collection.name) == self.base_path:
-        #         print("added semantic search")
-        #         local_environment.register_tools({
-        #             "semantic_search": SemanticSearch(),
-
-        #         })
+            # print(collection.name,collection.name.replace("_", "/")[1:],self.base_path)
+            # if decode_path(collection.name) == self.base_path:
+            #     print("added semantic search")
+            #     local_environment.register_tools({
+            #         "semantic_search": SemanticSearch(),
+            #         "respond" : RespondUserTool(),
+            #     })
         self.default_environment = local_environment
 
         if self.args.headless:
@@ -167,7 +170,7 @@ class Session:
         else:
             user_environment = UserEnvironment(self.args.user_input)
             user_environment.register_tools(
-                {"ask_user": AskUserTool(), "set_task": SetTaskTool()}
+                {"ask_user": AskUserTool()}
             )
 
             self.environments = {
@@ -225,7 +228,7 @@ class Session:
                 task=data["task"] if "task" in data else None,
                 db_path=data["db_path"] if "db_path" in data else "."
             ),
-            agent=TaskAgent(
+            agent=ConversationalAgent(
                 name=data["agent"]["name"],
                 args=AgentArguments(**data["agent"]["config"]),
                 temperature=data["agent"]["temperature"],
@@ -306,6 +309,7 @@ class Session:
             # self.telemetry_client.capture(telemetry_event)
 
             if event["type"] == "Stop" and event["content"]["type"] != "submit":
+                print("hopefully here")
                 self.status = "terminated"
                 break
             elif event["type"] == "Stop" and event["content"]["type"] == "submit":
@@ -330,6 +334,7 @@ class Session:
 
     def step_event(self, event):
         new_events = []
+        print("event",event)
         match event["type"]:
             case "Error":
                 new_events.append(
@@ -360,6 +365,14 @@ class Session:
             case "ModelRequest":
                 # TODO: Need some quantized timestep for saving persistence that isn't literally every 0.1s
                 self.persist()
+                if self.state.editor and self.state.editor.files:
+                    for file in self.state.editor.files:
+                        self.state.editor.files[file]["lines"]= read_file({
+                            "environment" : self.default_environment,
+                            "session" : self,
+                            "state" : self.state,
+                        },
+                        file)
                 thought, action, output = self.agent.predict(
                     self.get_last_task(), event["content"], self
                 )
@@ -372,6 +385,8 @@ class Session:
                             "consumer": event["producer"],
                         }
                     )
+                elif action == "error":
+                    pass
                 else:
                     new_events.append(
                         {
@@ -383,6 +398,21 @@ class Session:
                             "consumer": event["producer"],
                         }
                     )
+
+            case "RateLimit":
+                for i in range(60):
+                    if self.status == "terminating":
+                        break
+                    time.sleep(1)
+                new_events.append(
+                    {
+                        "type": "ModelRequest",
+                        "content": event["content"],
+                        "producer": self.agent.name,
+                        "consumer": event["producer"],
+                    }
+                )
+
 
             case "ToolRequest":
                 tool_name, args = event["content"]["toolname"], event["content"]["args"]
@@ -442,6 +472,14 @@ class Session:
                                 raise e
 
                             try:
+
+                                new_events.append({
+                                    "type": "ShellRequest",
+                                    "content": event["content"]["raw_command"],
+                                    "producer": self.default_environment.name,
+                                    "consumer": event["producer"],
+                                })
+
                                 response = self.default_environment.default_tool(
                                     {
                                         "state": self.state,
@@ -452,6 +490,13 @@ class Session:
                                     event["content"]["toolname"],
                                     event["content"]["args"],
                                 )
+                                
+                                new_events.append({
+                                    "type": "ShellResponse",
+                                    "content": response,
+                                    "producer": self.default_environment.name,
+                                    "consumer": event["producer"],
+                                })
 
                                 new_events.append(
                                     {
@@ -485,6 +530,11 @@ class Session:
                             )
 
             case "ToolResponse":
+                # self.versioning.commit_all_files("commit")
+                # self.versioning.commit_all_files("commit")
+                # Sync the editor state
+
+                
                 new_events.append(
                     {
                         "type": "ModelRequest",
@@ -588,6 +638,21 @@ class Session:
             self.state.task = self.args.headless
         else:
             self.state.task = self.args.task
+
+
+        if self.args.versioning == "fossil":
+            try:
+                self.versioning = FossilVersioning(self.args.path, self.args.db_path)
+                self.versioning.initialize_fossil()
+                self.versioning.commit_all_files()
+            except FileNotFoundError:
+                self.versioning.install_fossil()
+                self.versioning = FossilVersioning(self.args.path, self.args.db_path)
+                self.versioning.initialize_fossil()
+                self.versioning.commit_all_files()
+            except Exception as e:
+                print("Error setting up fossil versioning", e)
+                self.versioning = None
 
         self.status = "paused"
 

@@ -109,7 +109,7 @@ class LocalEnvironment:
             )
 
             self.process.stdin.write(input + "\n")
-            self.process.stdin.write('echo "$?"\n')
+            self.process.stdin.write('echo "\n$?"\n')
             self.process.stdin.write("echo 'EOL'\n")
             self.process.stdin.write(f"echo 'EOL' >&2\n")
             self.process.stdin.flush()
@@ -193,6 +193,15 @@ class UserEnvironment:
             }
         )
         response = self.user_func()
+        if response == "terminate":
+            self.session.event_log.append(
+                {
+                    "type": "Stop",
+                    "content": response,
+                    "producer": self.name,
+                    "consumer": "tool",
+                }
+            )
         self.session.event_log.append(
             {
                 "type": "UserResponse",

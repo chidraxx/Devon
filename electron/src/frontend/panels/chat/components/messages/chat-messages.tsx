@@ -4,26 +4,33 @@ import {
     ToolResponseMessage,
     ThoughtMessage,
     SpinnerMessage,
+    RateLimitWarning,
+    ErrorMessage,
 } from '@/panels/chat/components/messages/chat.message-variants'
 import { NotebookPen } from 'lucide-react'
+import type { Message } from '@/lib/types'
 export interface ChatMessages {
-    messages: any[]
+    messages: Message[]
     spinning: boolean
+    paused: boolean
 }
 
-const ChatMessages = ({ messages, spinning }: ChatMessages) => {
-    return messages?.length ? (
-        <div className="relative px-6 mt-5">
-            {messages.map((message, index) => (
-                <DisplayedChatMessage
-                    key={message.id ?? index}
-                    message={message}
-                />
-            ))}
-            {spinning && <SpinnerMessage />}
+const ChatMessages = ({ messages, spinning, paused }: ChatMessages) => {
+    return (
+        <div className="relative px-6 mt-8">
+            {messages && messages.length ? (
+                <>
+                    {messages.map((message, index) => (
+                        <DisplayedChatMessage
+                            key={`${index}-${message.type}`}
+                            index={index}
+                            message={message}
+                        />
+                    ))}
+                </>
+            ) : null}
+            {spinning && <SpinnerMessage paused={paused} />}
         </div>
-    ) : (
-        <></>
     )
 }
 
@@ -53,7 +60,14 @@ Task
 - Next: ModelResponse
 
  */
-const DisplayedChatMessage = ({ message }) => {
+
+const DisplayedChatMessage = ({
+    message,
+    index,
+}: {
+    message: Message
+    index: number
+}) => {
     return (
         message.type && (
             <div className="mb-8">
@@ -65,22 +79,18 @@ const DisplayedChatMessage = ({ message }) => {
                     <ChatTypeWrapper type="Command">
                         {message.text}
                     </ChatTypeWrapper>
+                ) : message.type === 'rateLimit' ? (
+                    <RateLimitWarning className="text-gray-400"></RateLimitWarning>
                 ) : message.type === 'tool' ? (
                     <ToolResponseMessage
                         className="text-gray-400"
                         content={message.text}
+                        index={index}
                     ></ToolResponseMessage>
                 ) : message.type === 'user' ? (
                     <UserMessage>{message.text}</UserMessage>
-                ) : message.type === 'task' ? (
-                    <div className="px-4 rounded-md border py-2">
-                        <ChatTypeWrapper
-                            type="Task"
-                            className="text-gray-400 flex italic"
-                        >
-                            {message.text}
-                        </ChatTypeWrapper>
-                    </div>
+                ) : message.type === 'error' ? (
+                    <ErrorMessage className={index === 1 ? '' : 'ml-[49px]'} content={message.text}></ErrorMessage>
                 ) : (
                     // <ChatTypeWrapper type="(Type not found)">
                     //     {message.content}
@@ -98,18 +108,18 @@ const ChatTypeWrapper = ({
     className,
 }: {
     type: string
-    children: any
+    children: string | JSX.Element
     className?: string
 }) => {
     let pref: JSX.Element = <></>
-    if (type === 'Task') {
-        pref = (
-            <span className="font-bold mr-2 flex gap-2 items-center not-italic">
-                <NotebookPen size={16} />
-                Task:
-            </span>
-        )
-    }
+    // if (type === 'Task') {
+    //     pref = (
+    //         <span className="font-bold mr-2 flex gap-2 items-center not-italic">
+    //             <NotebookPen size={16} />
+    //             Task:
+    //         </span>
+    //     )
+    // }
     return (
         <p className={className}>
             {pref}

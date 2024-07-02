@@ -1,8 +1,22 @@
+import { useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import CodeEditor from './components/code-editor'
 import ShellPanel from '@/panels/shell/shell-panel'
 import { SessionMachineContext } from '@/contexts/session-machine-context'
 import { Bot } from 'lucide-react'
 import { useToast } from '@/components/ui/use-toast'
+import FileTree from './components/file-tree/file-tree'
+import { File } from '@/lib/types'
+import {
+    getLanguageFromFilename,
+    getIconFromFilename,
+} from '@/lib/programming-language-utils'
+import useFileWatcher from './lib/hooks/use-file-watcher'
+import {
+    ResizableHandle,
+    ResizablePanel,
+    ResizablePanelGroup,
+} from '@/components/ui/resizable'
+import EditorPanelHeader from './components/editor-panel-header'
 
 const boilerplateFile = {
     id: 'main.py',
@@ -14,6 +28,7 @@ const boilerplateFile = {
 `,
     },
 }
+
 const boilerplateFile2 = {
     id: 'hello.py',
     name: 'hello.py',
@@ -25,72 +40,252 @@ const boilerplateFile2 = {
     },
 }
 
+type FileEvent = {
+    files: string[]
+    openFiles: {
+        path: string
+        content: string
+    }[]
+}
+
+
 const EditorPanel = ({
     isExpandedVariant = false,
 }: {
     chatId: string | null
     isExpandedVariant?: boolean
 }) => {
-    const { toast } = useToast()
-    const messages = SessionMachineContext.useSelector(state =>
-        state.context.serverEventContext.messages.filter(
-            message => message.type === 'tool'
-        )
-    )
+    const [selectedFileId, setSelectedFileId] = useState<string | null>(null)
+    const [openFiles, setOpenFiles] = useState<File<string>[]>([])
+    const prevInitialFilesRef = useRef<File<string>[]>([])
+    const [initialLoading, setInitialLoading] = useState(true)
+    const [prevDirPath, setPrevDirPath] = useState<string | null>(null)
+    const [files, setFiles] = useState<File<undefined>[]>([])
+
+
     const path = SessionMachineContext.useSelector(
-        state => state.context?.sessionState?.path ?? '.'
+        state => state.context?.sessionState?.path ?? ''
     )
     const showEditorBorders = true
 
+    const agentFiles: File[] = SessionMachineContext.useSelector(state => {
+        if (
+            state.context.sessionState?.editor &&
+            state.context.sessionState.editor.files
+        ) {
+            // console.log(state.context.sessionState.editor.files)
+
+
+            return Object.keys(state.context.sessionState.editor.files).map(
+                filepath => {
+                    window.api.invoke('editor-add-open-file', filepath)
+                    return {
+                        id: filepath,
+                        name: filepath.split('/').pop() ?? 'unnamed_file',
+                        path: filepath,
+                        language:
+                            getLanguageFromFilename(
+                                filepath.split('/').pop() ?? ''
+                            ) ?? '',
+                        value: state.context.sessionState.editor.files[filepath],
+                        icon:
+                            getIconFromFilename(filepath.split('/').pop() ?? '') ??
+                            '',
+                        agentHasOpen: true,
+                    }
+                }
+            )
+        } else {
+            return [] as File[]
+        }
+    },(prevState,newState)=> {
+        // Deep equality check for arrays
+        if (prevState.length !== newState.length) {
+            return false;
+        }
+        
+        for (let i = 0; i < prevState.length; i++) {
+            if (prevState[i].id !== newState[i].id) {
+                return false;
+            }
+        }
+        return true;
+    })
+
+
+    // const { files, initialLoading } = useFileWatcher(initialFiles, path)
+    let dirPath = path
+    useEffect(() => {
+        const startWatching = async () => {
+            if (!dirPath) {
+                return () => { }
+            }
+            let loading = false
+            if (prevDirPath !== dirPath) {
+                setInitialLoading(true)
+                loading = true
+                setPrevDirPath(dirPath)
+            }
+
+            const success = await window.api.invoke('watch-dir', dirPath)
+            if (!success) {
+                console.error('Failed to start watching directory')
+                return () => { }
+            }
+            const handleFileChanges = (events: FileEvent) => {
+                if (initialLoading || loading) {
+                    setInitialLoading(false)
+                }
+                setFiles(prevFiles => {
+                    const fileMap = new Map(
+                        prevFiles.map(file => [file.path, file])
+                    )
+   
+                        events.files.forEach(file => {
+                            fileMap.set(file, {
+                                id: file,
+                                name: file.split('/').pop() ?? 'unnamed_file',
+                                path: file,
+                                language: getLanguageFromFilename(file.split('/').pop() ?? '') ?? '',
+                                value: undefined,
+                                icon: getIconFromFilename(file.split('/').pop() ?? '') ?? '',
+                            })
+                        })
+                    return Array.from(fileMap.values())
+                })
+                
+                setOpenFiles(events.openFiles.map((file) => {
+                    return {
+                        id: file.path,
+                        name: file.path.split('/').pop() ?? 'unnamed_file',
+                        path: file.path,
+                        language: getLanguageFromFilename(file.path.split('/').pop() ?? '') ?? '',
+                        value: file.content,
+                        icon: getIconFromFilename(file.path.split('/').pop() ?? '') ?? '',
+                        }
+                    }))
+            }
+
+            window.api.receive('editor-file-changed', handleFileChanges)
+
+            return () => {
+                window.api.send('unsubscribe')
+                window.api.removeAllListeners('editor-file-changed')
+            }
+        }
+
+        let cleanup: () => void
+
+        startWatching().then(cleanupFn => {
+            cleanup = cleanupFn
+        })
+
+        return () => {
+            if (cleanup) {
+                cleanup()
+            }
+            setFiles([])
+        }
+    }, [dirPath])
+
+    useEffect(() => {
+        const prevInitialFiles = prevInitialFilesRef.current
+
+        // Detect new files in initialFiles
+        const newFiles = agentFiles.filter(
+            file =>
+                !prevInitialFiles.some(prevFile => prevFile.path === file.path)
+        )
+
+        if (newFiles.length > 0) {
+            setOpenFiles(prevOpenFiles => [...prevOpenFiles, ...newFiles])
+            if (selectedFileId === null) {
+                setSelectedFileId(newFiles[0].id)
+            }
+        }
+
+        // Update the ref for the next comparison
+        prevInitialFilesRef.current = agentFiles
+    }, [agentFiles])
+
+    useEffect(() => {
+        openFiles.forEach(file => {
+            if (!file.value) {
+                window.api.invoke("editor-add-open-file", file.path)
+            }
+        })
+    }, [openFiles])
+
+    const handleFileSelect = useCallback(
+        (fileId: string | null) => {
+            setSelectedFileId(fileId)
+            let selectedFile = files.find(file => file.id === fileId)
+
+            if (selectedFile && !openFiles.some(file => file.id === fileId)) {
+                selectedFile.value = "" 
+                setOpenFiles(prevOpenFiles => [...prevOpenFiles, selectedFile as unknown as File<string>])
+            }
+        },
+        [files, openFiles]
+    )
+
     return (
         <div
-            className={`flex flex-col h-full w-full ${
-                showEditorBorders ? 'pb-7' : ''
-            }`}
+            className={`flex flex-col h-full w-full ${showEditorBorders ? 'pb-7' : ''
+                }`}
         >
             <div
-                className={`flex flex-row h-full ${
-                    showEditorBorders
+                className={`flex flex-row h-full ${showEditorBorders
                         ? 'rounded-md border bg-midnight border-outlinecolor pt-0 mr-3 overflow-hidden'
                         : ''
-                }`}
+                    }`}
             >
-                <div className="flex flex-col flex-grow w-full h-full">
-                    <div className="w-full border-b border-outlinecolor flex justify-center py-1 relative">
-                        <div className="flex space-x-2 ml-2 mr-4 absolute left-1 top-[11px] opacity-80">
-                            <div className="w-[9px] h-[9px] bg-red-500 rounded-full"></div>
-                            <div className="w-[9px] h-[9px] bg-yellow-400 rounded-full"></div>
-                            <div className="w-[9px] h-[9px] bg-green-500 rounded-full"></div>
-                        </div>
-                        <button
-                            onClick={() =>
-                                toast({
-                                    title: 'Hey! ~ Devon waves at you ~ 👋',
-                                })
-                            }
-                            className="group smooth-hover bg-night px-[100px] border border-outlinecolor rounded-md my-1 flex gap-[5px] items-center"
-                        >
-                            <Bot
-                                size={12}
-                                className="group-hover:smooth-hover group-hover:text-white text-neutral-400 mb-[2px] -ml-2"
-                            />
-                            <p className="group-hover:smooth-hover group-hover:text-white text-[0.8rem] text-neutral-400">
-                                Devon
-                            </p>
-                        </button>
+                <div
+                    // direction="vertical"
+                    className="flex flex-col flex-grow w-full h-full"
+                >
+                    <EditorPanelHeader path={path} initialLoading={initialLoading}/>
+                    <div
+                        // defaultSize={80}
+                        className="flex overflow-hidden h-full"
+                    >
+                        <ResizablePanelGroup direction="horizontal">
+                            <ResizablePanel
+                                defaultSize={20}
+                                className="flex-none w-40 bg-midnight border-r border-outlinecolor"
+                            >
+                                <FileTree
+                                    files={files}
+                                    selectedFileId={selectedFileId}
+                                    setSelectedFileId={handleFileSelect}
+                                    projectPath={path}
+                                    initialLoading={initialLoading}
+                                />
+                            </ResizablePanel>
+                            <ResizableHandle />
+                            <ResizablePanel
+                                defaultSize={80}
+                                className="flex-grow flex flex-col overflow-hidden"
+                            >
+                                <CodeEditor
+                                    files={openFiles}
+                                    selectedFileId={selectedFileId}
+                                    setSelectedFileId={handleFileSelect}
+                                    isExpandedVariant={isExpandedVariant}
+                                    showEditorBorders={showEditorBorders}
+                                    path={path}
+                                    initialFiles={agentFiles}
+                                />
+                            </ResizablePanel>
+                        </ResizablePanelGroup>
                     </div>
-                    <div className="flex flex-grow overflow-auto">
-                        {/* <div className="flex-none w-40 bg-midnight border-r border-outlinecolor"> */}
-                        {/* <FileTree /> */}
-                        {/* </div> */}
-                        <CodeEditor
-                            isExpandedVariant={isExpandedVariant}
-                            showEditorBorders={showEditorBorders}
-                            path={path}
-                        />
-                    </div>
-                    <div className={`h-[23vh] ${showEditorBorders ? '' : ''}`}>
-                        <ShellPanel messages={messages} />
+
+                    {/* <ResizableHandle /> */}
+                    <div
+                        // defaultSize={20}
+                        className={`h-[20vh] ${showEditorBorders ? '' : ''}`}
+                    >
+                        <ShellPanel path={path} />
                     </div>
                 </div>
             </div>

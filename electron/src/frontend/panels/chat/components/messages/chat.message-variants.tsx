@@ -1,14 +1,20 @@
+import { useState, useRef, useEffect } from 'react'
 import { Bot, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { spinner } from './chat.spinner'
-import { CodeBlock } from '@/components/ui/codeblock'
-import { MemoizedReactMarkdown } from './chat.memoized-react-markdown'
-import remarkGfm from 'remark-gfm'
-import remarkMath from 'remark-math'
-// import { remarkCustomCode } from './remarkCustomCode' // import the custom plugin
-// import { TfiThought } from 'react-icons/tfi'
+import * as AccordionPrimitive from '@radix-ui/react-accordion'
+import Spinner from '../ui/loading-spinner'
 import { Icon } from '@iconify/react'
-
+import { parseDiff } from 'react-diff-view'
+import 'react-diff-view/style/index.css'
+import './diff-view.css'
+import { parseFileDiff } from '../../lib/utils'
+import * as unidiff from 'unidiff'
+import StyledMessage from './styled-message'
+import DiffViewer from '../ui/diff-viewer'
+import { ChevronDown, CircleAlert, Ban, Info } from 'lucide-react'
+import { getFileName, parseCommand } from '@/lib/utils'
+import AtomLoader from '@/components/ui/atom-loader/atom-loader'
+import DotsSpinner from '@/components/ui/dots-spinner/dots-spinner'
 // Different types of message bubbles.
 
 export function UserMessage({ children }: { children: React.ReactNode }) {
@@ -17,7 +23,7 @@ export function UserMessage({ children }: { children: React.ReactNode }) {
             <div className="flex size-[33px] shrink-0 select-none items-center justify-center rounded-md border bg-background shadow-sm">
                 <User />
             </div>
-            <div className="ml-4 flex-1 space-y-2 overflow-hidden pl-2">
+            <div className="ml-4 flex-1 space-y-2 overflow-hidden pl-2 chat-text-relaxed">
                 {children}
             </div>
         </div>
@@ -58,14 +64,16 @@ export function SystemMessage({ children }: { children: React.ReactNode }) {
     )
 }
 
-export function SpinnerMessage() {
+export function SpinnerMessage({ paused = false }: { paused?: boolean }) {
     return (
         <div className="group relative flex items-start">
             <div className="flex size-[32px] shrink-0 select-none items-center justify-center rounded-md border bg-primary text-primary-foreground shadow-sm">
                 <Bot />
             </div>
-            <div className="ml-4 h-[32px] flex flex-row items-center flex-1 space-y-2 overflow-hidden px-1">
-                {spinner}
+            <div className="ml-5 h-[32px] flex flex-row items-center flex-1 space-y-2 overflow-hidden px-1">
+                {/* <Spinner paused={paused} /> */}
+                {/* <AtomLoader speed="fast" size="xs" /> */}
+                {!paused && <DotsSpinner size={8} paused={paused} />}
             </div>
         </div>
     )
@@ -74,15 +82,29 @@ export function SpinnerMessage() {
 export const BotMessage = ({
     content,
     className,
+    pretext,
 }: {
     content: string
     className?: string
+    pretext?: JSX.Element
 }) => {
     const icon = (
         <div className="flex size-[32px] shrink-0 select-none items-center justify-center rounded-md border bg-primary text-primary-foreground shadow-sm">
             <Bot />
         </div>
     )
+    if (pretext) {
+        return (
+            <div className={cn('group relative flex items-start', className)}>
+                {icon}
+                <div className="ml-4 flex-1 space-y-2 overflow-hidden px-1 flex">
+                    {pretext}
+                    {content}
+                </div>
+            </div>
+        )
+    }
+
     return <StyledMessage content={content} className={className} icon={icon} />
 }
 
@@ -108,89 +130,213 @@ export const ThoughtMessage = ({
 export const ToolResponseMessage = ({
     content,
     className,
+    index,
+}: {
+    content: string
+    className?: string
+    index: number
+}) => {
+    const icon = <div className="w-[32px]"></div>
+    let [command, response] = content.toString().split('|START_RESPONSE|')
+    const parsedRes = parseCommand(command)
+    if (parsedRes?.command === 'ask_user') {
+        return null
+    } else if (parsedRes?.command === 'no_op') {
+        if (index === 0) {
+            return null
+        }
+        return <ThoughtMessage content={'Let me cook...'} />
+    }
+
+    if (command.includes('Running command: edit')) {
+        const indexOfFirstNewline = command.indexOf('\n')
+        if (indexOfFirstNewline !== -1) {
+            command = command.substring(indexOfFirstNewline + 1)
+        }
+        const { path, language, searchContent, replaceContent } =
+            parseFileDiff(command)
+
+        const resultingDiffLines = unidiff.diffLines(
+            searchContent,
+            replaceContent
+        )
+        const unifiedDiff = unidiff.formatLines(resultingDiffLines, {
+            aname: 'before',
+            bname: 'after',
+            context: 3,
+        })
+
+        const files = parseDiff(unifiedDiff)
+
+        return (
+            <div className="flex ml-[50px] flex-col">
+                {parsedRes &&
+                    parsedRes.command != 'create_file' &&
+                    parsedRes.command && (
+                        <div className="mt-2 w-full mb-1">
+                            <pre className="text-md mb-2 text-gray-400 whitespace-pre-wrap break-words">
+                                <strong>Command:</strong> {parsedRes.command}{' '}
+                                {getFileName(path)}
+                            </pre>
+                        </div>
+                    )}
+                <div className="relative w-full font-sans codeblock bg-zinc-950 rounded-md overflow-hidden">
+                    <div className="flex items-center justify-between w-full pl-3 py-0 pr-1 bg-code-header text-zinc-100 rounded-t-md sticky top-0 hover:cursor-pointer">
+                        <div className="flex py-2 items-center text-gray-300 px-1">
+                            <pre className="text-sm flex">diff</pre>
+                        </div>
+                    </div>
+                    <div className="bg-midnight text-zinc-100 overflow-hidden w-full">
+                        <DiffViewer files={files} />
+                    </div>
+                </div>
+            </div>
+        )
+    }
+    return (
+        <>
+            {parsedRes &&
+            parsedRes.command != 'create_file' &&
+            parsedRes.command ? (
+                <div className="pl-[49px] mt-2 w-full">
+                    <pre className="text-md mb-2 text-gray-400 whitespace-pre-wrap break-words">
+                        <strong>Command:</strong> {parsedRes.command}{' '}
+                        {parsedRes.remainingText}
+                    </pre>
+                </div>
+            ) : (
+                <StyledMessage
+                    content={command}
+                    className={className}
+                    icon={icon}
+                />
+            )}
+
+            {response && <ResponseBlock response={response} />}
+        </>
+    )
+}
+
+export const RateLimitWarning = ({ className }: { className?: string }) => {
+    // return (
+    //     <div className="ml-[49px] mt-3 overflow-auto text-gray-400">
+    //         <pre className="text-sm mb-2 whitespace-pre-wrap break-words">
+    //             <strong>Rate limit reached:</strong> Automatically retrying in 1
+    //             minute...
+    //         </pre>
+    //     </div>
+    // )
+    return (
+        <div className="ml-[49px] mt-3 overflow-auto !text-gray-400 flex items-center gap-[6px] chat-text-relaxed">
+            <Info size={18} />
+            <p className="text-md">
+                <span>Rate limit reached:</span> Automatically retrying in 1
+                minute...
+            </p>
+        </div>
+    )
+}
+
+export const ErrorMessage = ({
+    content,
+    className,
 }: {
     content: string
     className?: string
 }) => {
-    const icon = <div className="w-[32px]"></div>
-    let [command, response] = content.toString().split('|START_RESPONSE|')
-    return <StyledMessage content={command} className={className} icon={icon} />
-}
+    const [expanded, setExpanded] = useState(true)
+    const [height, setHeight] = useState(0)
+    const contentRef = useRef<HTMLPreElement>(null)
 
-const StyledMessage = ({ content, className, icon }) => {
-    const path = extractPath(content)
-    const textWithoutPath = path
-        ? content.replace(`# ${path}`, '').trim()
-        : content
+    const toggleExpanded = () => setExpanded(prev => !prev)
+
+    useEffect(() => {
+        if (contentRef.current) {
+            setHeight(expanded ? contentRef.current.scrollHeight : 0)
+        }
+    }, [expanded, content])
 
     return (
-        <div className={cn('group relative flex items-start', className)}>
-            {icon}
-            <div className="ml-4 flex-1 space-y-2 overflow-hidden px-1">
-                {path && (
-                    <div className="text-sm text-gray-500 mb-2">
-                        <strong>Path:</strong> {path}
-                    </div>
-                )}
-                <MemoizedReactMarkdown
-                    className="prose break-words dark:prose-invert prose-p:leading-relaxed prose-pre:p-0"
-                    remarkPlugins={[remarkGfm, remarkMath]}
-                    components={{
-                        p({ children }) {
-                            return <p className="mb-2 last:mb-0">{children}</p>
-                        },
-                        code({ node, inline, className, children, ...props }) {
-                            // Extract the path from the code block
-                            const codeContent = String(children).replace(
-                                /\n$/,
-                                ''
-                            )
-                            const path = extractPath(codeContent)
-                            const textWithoutPath = path
-                                ? codeContent.replace(`# ${path}`, '').trim()
-                                : codeContent
-
-                            if (inline || !className) {
-                                return (
-                                    <code
-                                        className={cn(
-                                            className,
-                                            'bg-black px-[4px] py-[3px] rounded-md text-white text-[0.9rem]'
-                                        )}
-                                        {...props}
-                                    >
-                                        {children}
-                                    </code>
-                                )
-                            }
-
-                            const match = /language-(\w+)/.exec(className || '')
-
-                            return (
-                                <>
-                                    <CodeBlock
-                                        key={Math.random()}
-                                        language={(match && match[1]) || ''}
-                                        value={textWithoutPath}
-                                        path={path}
-                                        {...props}
-                                    />
-                                </>
-                            )
-                        },
-                    }}
+        <div className={cn('mt-3 overflow-auto', className)}>
+            <div className="relative w-full font-sans codeblock bg-zinc-950 rounded-md overflow-hidden">
+                <div
+                    className="flex items-center justify-between w-full pl-3 py-0 pr-1 bg-code-header text-zinc-100 rounded-t-md sticky top-0 hover:cursor-pointer"
+                    onClick={toggleExpanded}
                 >
-                    {textWithoutPath}
-                </MemoizedReactMarkdown>
+                    <div className="flex py-2 items-center text-red-400 px-[1px] gap-[3px]">
+                        {/* <CircleAlert
+                            className={cn(
+                                'h-[13px] w-[13px] transition-transform duration-200 ease-in-out mr-[3px]'
+                            )}
+                        /> */}
+                        <Ban
+                            className={cn(
+                                'h-[12px] w-[12px] transition-transform duration-200 ease-in-out mr-[3px] ml-[2px]'
+                            )}
+                        />
+                        <pre className="text-sm flex">Error</pre>
+                    </div>
+                </div>
+                <div
+                    style={{ height: `${height}px` }}
+                    className="transition-[height] duration-300 ease-in-out overflow-auto bg-midnight"
+                >
+                    <div className="duration-300 ease-in-out overflow-y-auto bg-midnight w-full max-h-[300px]">
+                        <pre
+                            ref={contentRef}
+                            className="text-zinc-100 p-5 text-sm w-full rounded-b-md whitespace-pre-wrap break-words"
+                        >
+                            {content}
+                        </pre>
+                    </div>
+                </div>
             </div>
         </div>
     )
 }
 
-const extractPath = (content: string) => {
-    const pathMatch = content.match(/^# (\/[^\s]+)/)
-    if (pathMatch) {
-        return pathMatch[1]
-    }
-    return null
+const ResponseBlock = ({ response }: { response: string }) => {
+    const [expanded, setExpanded] = useState(false)
+    const [height, setHeight] = useState(0)
+    const contentRef = useRef<HTMLPreElement>(null)
+
+    const toggleExpanded = () => setExpanded(prev => !prev)
+
+    useEffect(() => {
+        if (contentRef.current) {
+            setHeight(expanded ? contentRef.current.scrollHeight : 0)
+        }
+    }, [expanded, response])
+
+    return (
+        <div className="ml-[49px] mt-3">
+            <div className="relative w-full font-sans codeblock bg-zinc-950 rounded-md overflow-hidden">
+                <div
+                    className="flex items-center justify-between w-full pl-3 py-0 pr-1 bg-code-header text-zinc-100 rounded-t-md sticky top-0 hover:cursor-pointer"
+                    onClick={toggleExpanded}
+                >
+                    <div className="flex py-2 items-center text-gray-300">
+                        <ChevronDown
+                            className={cn(
+                                'h-[15px] w-[15px] transition-transform duration-200 ease-in-out mr-[3px]',
+                                expanded ? '' : '-rotate-90'
+                            )}
+                        />
+                        <pre className="text-sm flex">Response</pre>
+                    </div>
+                </div>
+                <div
+                    style={{ height: `${height}px` }}
+                    className="transition-[height] duration-300 ease-in-out overflow-auto bg-midnight"
+                >
+                    <pre
+                        ref={contentRef}
+                        className="text-zinc-100 p-5 text-sm w-full rounded-b-md"
+                    >
+                        {response}
+                    </pre>
+                </div>
+            </div>
+        </div>
+    )
 }

@@ -1,9 +1,11 @@
+import { useRef } from 'react'
 import ChatHeader from './components/chat-header'
 import { useScrollAnchor } from '@/panels/chat/lib/hooks/chat.use-scroll-anchor'
-import ChatMessages from './components/messages/chat.messages'
+import ChatMessages from './components/messages/chat-messages'
 import ChatInputField from './components/input/chat-input-field'
 import { SessionMachineContext } from '@/contexts/session-machine-context'
 import { Skeleton } from '@/components/ui/skeleton'
+import type { Message } from '@/lib/types'
 
 export default function Chat({
     sessionId,
@@ -31,8 +33,27 @@ export default function Chat({
     const eventState = SessionMachineContext.useSelector(
         state => state.context.serverEventContext
     )
+    const isPaused = SessionMachineContext.useActorRef()
+        .getSnapshot()
+        .matches('paused')
 
-    let messages = eventState.messages
+    let messages: Message[] = eventState.messages
+    if (
+        eventState.messages.length > 1 &&
+        eventState.messages[0].type === 'task' &&
+        eventState.messages[1].type === 'thought'
+    ) {
+        messages = messages.slice(2)
+    }
+
+    const previousMessagesLengthRef = useRef(messages.length)
+
+    if (
+        previousMessagesLengthRef.current &&
+        messages.length > previousMessagesLengthRef.current
+    ) {
+        scrollToBottom()
+    }
 
     if (!state.matches('running')) {
         status = 'Initializing...'
@@ -45,7 +66,8 @@ export default function Chat({
     }
 
     return (
-        <div className="rounded-lg h-full w-full max-w-4xl flex flex-col flex-2">
+        // <div className="rounded-lg h-full w-full max-w-4xl flex flex-col flex-2">
+        <div className="rounded-lg h-full w-full flex flex-col flex-2">
             <ChatHeader sessionId={sessionId} headerIcon={headerIcon} />
             <div className="flex-1 overflow-y-auto">
                 {/* {!backendStarted && <div>Initializing...</div>} */}
@@ -67,13 +89,11 @@ export default function Chat({
                         !state.matches('paused') ? (
                             <LoadingSkeleton />
                         ) : (
-                            messages &&
-                            messages.length > 0 && (
-                                <ChatMessages
-                                    messages={messages}
-                                    spinning={eventState.modelLoading}
-                                />
-                            )
+                            <ChatMessages
+                                messages={messages}
+                                spinning={eventState.modelLoading}
+                                paused={isPaused}
+                            />
                         )}
                         <div className="h-px w-full" ref={visibilityRef}></div>
                         {/* </div> */}
@@ -90,7 +110,7 @@ export default function Chat({
                                 scrollToBottom={scrollToBottom}
                                 viewOnly={viewOnly}
                                 eventContext={eventState}
-                                loading={!state.matches('running')}
+                                loading={!state.can({ type: 'session.toggle' })}
                                 sessionId={sessionId}
                             />
                         </div>
@@ -107,14 +127,14 @@ export default function Chat({
 const LoadingSkeleton = () => {
     return (
         <>
-            <div className="flex flex-col flex-2 relative h-full overflow-y-auto mx-8 mt-8 mr-10">
+            <div className="flex flex-col flex-2 relative h-full overflow-y-auto mx-6 mt-8 mr-10">
                 <div className="flex-1">
                     <div className="mb-8">
                         <div className="flex gap-5">
                             <Skeleton className="w-[32px] h-[32px]" />
                             <div className="w-full flex flex-col justify-between">
                                 <Skeleton className="w-full h-[12px] rounded-[4px]" />
-                                <Skeleton className="w-2/3 h-[12px] rounded-[4px] bg-[#333333]" />
+                                <Skeleton className="w-2/3 h-[12px] rounded-[4px] bg-skeleton bg-opacity-80" />
                             </div>
                         </div>
                     </div>
@@ -123,7 +143,7 @@ const LoadingSkeleton = () => {
                             <Skeleton className="w-[32px] h-[32px]" />
                             <div className="w-full flex flex-col justify-between">
                                 <Skeleton className="w-full h-[12px] rounded-[4px]" />
-                                <Skeleton className="w-1/3 h-[12px] rounded-[4px] bg-[#333333]" />
+                                <Skeleton className="w-1/3 h-[12px] rounded-[4px] bg-skeleton bg-opacity-80" />
                             </div>
                         </div>
                     </div>
@@ -132,7 +152,7 @@ const LoadingSkeleton = () => {
                             <Skeleton className="w-[32px] h-[32px]" />
                             <div className="w-full flex flex-col justify-between">
                                 <Skeleton className="w-full h-[12px] rounded-[4px]" />
-                                <Skeleton className="w-4/5 h-[12px] rounded-[4px] bg-[#333333]" />
+                                <Skeleton className="w-4/5 h-[12px] rounded-[4px] bg-skeleton bg-opacity-80" />
                             </div>
                         </div>
                     </div>
