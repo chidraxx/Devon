@@ -20,6 +20,7 @@ from devon_agent.agents.model import AnthropicModel, ModelArguments, OpenAiModel
 from devon_agent.tools.utils import get_cwd
 from devon_agent.udiff import Hallucination
 from devon_agent.utils import LOGGER_NAME
+from devon_agent.retrieval.file_tree.file_tree_tool import FileTreeTool
 
 if TYPE_CHECKING:
     from devon_agent.session import Session
@@ -88,6 +89,16 @@ class ConversationalAgent(Agent):
             [self._format_editor_entry(k, v, PAGE_SIZE) for k, v in editor.items()]
         )
     
+    def _prepare_file_tree(self, session):
+        result_list, result_tree= FileTreeTool(root_dir=session.base_path).get_large_tree(session.base_path, 500, 20)
+
+        return f"""
+<FileTree>
+The following is the file tree of the codebase
+{result_tree}
+</FileTree>
+"""
+    
     def _prepare_anthropic(self, task, editor, session):
         command_docs = (
             "Custom Commands Documentation:\n"
@@ -98,9 +109,10 @@ class ConversationalAgent(Agent):
         )
 
         history = anthropic_history_to_bash_history(self.chat_history)
+        history_with_file_tree = self._prepare_file_tree(session) + history
         system_prompt = conversational_agent_system_prompt_template_v3(command_docs)
         last_user_prompt = conversational_agent_last_user_prompt_template_v3(
-            history,
+            history_with_file_tree,
             editor,
             get_cwd(
                 {

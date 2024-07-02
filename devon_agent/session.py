@@ -149,7 +149,7 @@ class Session:
                 # "submit": SubmitTool(),
                 "delete_file": DeleteFileTool().register_post_hook(save_delete_file),
                 "code_search": CodeSearch(),
-                "code_goto": CodeGoTo(),
+                "go_to_definition_or_references": CodeGoTo(),
                 "file_tree_display": FileTreeDisplay(),
             }
         )
