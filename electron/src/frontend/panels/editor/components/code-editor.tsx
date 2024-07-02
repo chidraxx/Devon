@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
-import Editor, { Monaco } from '@monaco-editor/react'
+import Editor, { Monaco, DiffEditor } from '@monaco-editor/react'
 import type { editor, Selection } from 'monaco-editor'
 import FileTabs from '@/panels/editor/components/file-tabs/file-tabs'
 import { File } from '@/lib/types'
@@ -278,68 +278,83 @@ export default function CodeEditor({
 
     useEffect(() => {
         const attachListeners = () => {
-            if (!editorRef.current || !monacoRef.current) return;
-            
-            const editor = editorRef.current;
-            const monaco = monacoRef.current;
-    
+            if (!editorRef.current || !monacoRef.current) return
+
+            const editor = editorRef.current
+            const monaco = monacoRef.current
+
             const handleMouseUp = () => {
-                const selection = editor.getSelection();
+                const selection = editor.getSelection()
                 if (selection && !selection.isEmpty()) {
-                    setPopoverVisible(true);
-                }
-            };
-    
-            const handleSelectionChange = (e: editor.ICursorSelectionChangedEvent) => {
-                const selection = editor.getSelection();
-                if (selectedFileId && selection && !selection.isEmpty()) {
-                    fileSelectionsRef.current[selectedFileId] = selection;
-                    updateSelectionInfo(editor, monaco, selection, selectedFileId);
-                } else {
-                    setPopoverVisible(false);
-                }
-            };
-    
-            const disposable = editor.onDidChangeCursorSelection(handleSelectionChange);
-    
-            // Restore selection when switching tabs or opening a new file
-            if (selectedFileId) {
-                const storedSelection = fileSelectionsRef.current[selectedFileId];
-                if (storedSelection) {
-                    editor.setSelection(storedSelection);
-                    updateSelectionInfo(editor, monaco, storedSelection, selectedFileId);
-                } else {
-                    // Clear selection and hide popover when opening a new file
-                    setPopoverVisible(false);
-                    editor.setSelection(new monaco.Selection(0, 0, 0, 0));
+                    setPopoverVisible(true)
                 }
             }
-    
-            window.addEventListener('mouseup', handleMouseUp);
-    
+
+            const handleSelectionChange = (
+                e: editor.ICursorSelectionChangedEvent
+            ) => {
+                const selection = editor.getSelection()
+                if (selectedFileId && selection && !selection.isEmpty()) {
+                    fileSelectionsRef.current[selectedFileId] = selection
+                    updateSelectionInfo(
+                        editor,
+                        monaco,
+                        selection,
+                        selectedFileId
+                    )
+                } else {
+                    setPopoverVisible(false)
+                }
+            }
+
+            const disposable = editor.onDidChangeCursorSelection(
+                handleSelectionChange
+            )
+
+            // Restore selection when switching tabs or opening a new file
+            if (selectedFileId) {
+                const storedSelection =
+                    fileSelectionsRef.current[selectedFileId]
+                if (storedSelection) {
+                    editor.setSelection(storedSelection)
+                    updateSelectionInfo(
+                        editor,
+                        monaco,
+                        storedSelection,
+                        selectedFileId
+                    )
+                } else {
+                    // Clear selection and hide popover when opening a new file
+                    setPopoverVisible(false)
+                    editor.setSelection(new monaco.Selection(0, 0, 0, 0))
+                }
+            }
+
+            window.addEventListener('mouseup', handleMouseUp)
+
             return () => {
-                disposable.dispose();
-                window.removeEventListener('mouseup', handleMouseUp);
-            };
-        };
-    
+                disposable.dispose()
+                window.removeEventListener('mouseup', handleMouseUp)
+            }
+        }
+
         // Initial attempt to attach listeners
-        let cleanup = attachListeners();
-    
+        let cleanup = attachListeners()
+
         // If editor is not available, set up an interval to check periodically
         const checkInterval = setInterval(() => {
             if (editorRef.current && monacoRef.current) {
-                clearInterval(checkInterval);
-                if (cleanup) cleanup();
-                cleanup = attachListeners();
+                clearInterval(checkInterval)
+                if (cleanup) cleanup()
+                cleanup = attachListeners()
             }
-        }, 100); // Check every 100ms
-    
+        }, 100) // Check every 100ms
+
         return () => {
-            clearInterval(checkInterval);
-            if (cleanup) cleanup();
-        };
-    }, [selectedFileId, updateSelectionInfo]);
+            clearInterval(checkInterval)
+            if (cleanup) cleanup()
+        }
+    }, [selectedFileId, updateSelectionInfo])
 
     useEffect(() => {
         if (selectedFileId) {
@@ -420,16 +435,24 @@ const BothEditorTypes = ({
         monaco: Monaco
     ) => void
 }) => (
-    <Editor
+    // <Editor
+    //     className="h-full"
+    //     theme="vs-dark"
+    //     defaultLanguage={'python'}
+    //     language={file?.language ?? 'python'}
+    //     defaultValue={''}
+    //     value={file?.value?.lines ?? file?.value ?? ''}
+    //     onMount={handleEditorDidMount}
+    //     path={file?.path}
+    //     options={{ readOnly: true, fontSize: 10 }}
+    // />
+    <DiffEditor
         className="h-full"
         theme="vs-dark"
-        defaultLanguage={'python'}
         language={file?.language ?? 'python'}
-        defaultValue={''}
-        value={file?.value?.lines ?? file?.value ?? ''}
+        original={file?.value?.lines ?? file?.value ?? ''}
+        modified={file?.value?.lines ?? file?.value ?? ''}
         onMount={handleEditorDidMount}
-        path={file?.path}
-        options={{ readOnly: true, fontSize: 10 }}
     />
 )
 
