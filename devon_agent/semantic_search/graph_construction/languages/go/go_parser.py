@@ -1,9 +1,10 @@
 from devon_agent.semantic_search.graph_construction.core.base_parser import BaseParser
-class TypeScriptParser(BaseParser):
-    extensions = [".ts", ".tsx"]
+
+class GoParser(BaseParser):
+    extensions = [".go"]
 
     def __init__(self):
-        super().__init__("typescript", "*")
+        super().__init__("go", "*")
 
     def parse_file(
         self,

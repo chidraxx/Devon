@@ -141,8 +141,12 @@ def create_index(index: str,background_tasks: fastapi.BackgroundTasks):
     graph_path = os.path.join(app.db_path, "graph/graph.pickle")
     collection_name = encode_path(index.replace("%2F", "/"))
     print(collection_name)
-    manager = CodeGraphManager(graph_path, vectorDB_path, collection_name,os.environ.get("OPENAI_API_KEY"),index.replace("%2F", "/"))
+    # manager = CodeGraphManager(graph_path, vectorDB_path, collection_name,os.environ.get("OPENAI_API_KEY"),index.replace("%2F", "/"))
+    manager = CodeGraphManager(graph_storage_path=graph_path, db_path=vectorDB_path, root_path=collection_name , openai_api_key=os.environ.get("OPENAI_API_KEY"), api_key=os.environ.get("ANTHROPIC_API_KEY"), model_name="haiku", collection_name=collection_name)
     background_tasks.add_task(register_task,manager.create_graph)
+
+    
+
 
 @app.get("/indexes/{index}/status")
 def get_index_status(index: str,background_tasks: fastapi.BackgroundTasks):

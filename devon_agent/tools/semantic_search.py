@@ -23,10 +23,14 @@ class SemanticSearch(Tool):
     def setup(self, ctx):
         self.db_path = ctx["session"].db_path
         # self.vectorDB = chromadb.PersistentClient(path=os.path.join(self.base_path, "vectorDB"))
+
+        agent : TaskAgent = ctx["session"].agent
+        api_key=agent.current_model.api_key
+        
         self.vectorDB_path = os.path.join(self.db_path, "vectorDB")
         self.graph_path = os.path.join(self.db_path, "graph/graph.pickle")
         self.collection_name = ctx["session"].base_path
-        self.manager = CodeGraphManager(self.graph_path, self.vectorDB_path, encode_path(ctx["session"].base_path) , os.environ.get("OPENAI_API_KEY"), ctx["session"].base_path)
+        self.manager = CodeGraphManager(graph_storage_path=self.graph_path, db_path=self.vectorDB_path, root_path=encode_path(ctx["session"].base_path) , openai_api_key=os.environ.get("OPENAI_API_KEY"), api_key=api_key, model_name="haiku", collection_name=self.collection_name)
         # self.manager.create_graph()
         
         
@@ -97,13 +101,14 @@ class SemanticSearch(Tool):
         #     return formatted_string
 
         try:
-            agent : TaskAgent = ctx["session"].agent
+            # agent : TaskAgent = ctx["session"].agent
             # model_args = ModelArguments(
             #     model_name=agent.args.model,
             #     temperature=0.5,
             #     api_key=agent.args.api_key
             # )
-            opus = agent.current_model
+            # opus = agent.current_model
+
 
             # Run the semantic search function
             # openai_ef = embedding_functions.OpenAIEmbeddingFunction(
@@ -111,10 +116,13 @@ class SemanticSearch(Tool):
             #     model_name="text-embedding-ada-002"
             # )
 
+            result = self.manager.query_and_run_agent(query_text)
+            # print(result)
+
             
             # collection_name = "devon-5"
 
-            response = self.manager.query(query_text)
+            # response = self.manager.query(query_text)
             # print(response)
             # print(asyncio.run(get_completion(agent_prompt(query_text, (response)), size="large")))
 
@@ -127,18 +135,18 @@ class SemanticSearch(Tool):
             # formated_response = format_response_for_llm(result)
 
             # Add the new query and response to the messages
-            self.messages.append({"content": f"The user's question: {query_text}\n\nOur tool's response: {response} \n\n Remember, be sure to give me relavent code snippets along with absolute file path while formulating an answer", "role": "user"})
+            # self.messages.append({"content": f"The user's question: {query_text}\n\nOur tool's response: {response} \n\n Remember, be sure to give me relavent code snippets along with absolute file path while formulating an answer", "role": "user"})
 
-            # Use all the messages in the LLM call
-            response = opus.query(
-                messages=self.messages,
-                system_message="You are a senior software engineer who is expert in understanding large codebases. You are serving a user who asked a question about a codebase they have no idea about. We did semantic search with their question on the codebase through our tool and we are giving you the output of the tool. The tool's response will not be fully accurate. Only choose the code that looks right to you while formulating the answer. Your job is to frame the answer properly by looking at all the different code blocks and give a final answer. Your job is to make the user understand the new codebase, so whenever you are talking about an important part of the codebase mention the full file path and codesnippet, like the whole code of a small function or the relavent section of a large function, which will be given along with the code in the tool output"
-            )
+            # # Use all the messages in the LLM call
+            # response = opus.query(
+            #     messages=self.messages,
+            #     system_message="You are a senior software engineer who is expert in understanding large codebases. You are serving a user who asked a question about a codebase they have no idea about. We did semantic search with their question on the codebase through our tool and we are giving you the output of the tool. The tool's response will not be fully accurate. Only choose the code that looks right to you while formulating the answer. Your job is to frame the answer properly by looking at all the different code blocks and give a final answer. Your job is to make the user understand the new codebase, so whenever you are talking about an important part of the codebase mention the full file path and codesnippet, like the whole code of a small function or the relavent section of a large function, which will be given along with the code in the tool output"
+            # )
 
             # Append the assistant's response to the messages
-            self.messages.append({"content": response, "role": "assistant"})
+            # self.messages.append({"content": response, "role": "assistant"})
             
-            return response
+            return result
         
         except Exception as e:
             return str(e)

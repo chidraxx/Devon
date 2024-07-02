@@ -1,9 +1,10 @@
 from devon_agent.semantic_search.graph_construction.core.base_parser import BaseParser
-class TypeScriptParser(BaseParser):
-    extensions = [".ts", ".tsx"]
+
+class CPPParser(BaseParser):
+    extensions = [".cpp", ".hpp", ".h", ".cc"]
 
     def __init__(self):
-        super().__init__("typescript", "*")
+        super().__init__("cpp", "*")
 
     def parse_file(
         self,

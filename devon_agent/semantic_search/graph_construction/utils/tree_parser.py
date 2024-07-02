@@ -12,6 +12,7 @@ def remove_non_ascii(text):
     return cleaned_text
 
 
+
 def traverse_tree(tree):
     cursor = tree.walk()
     visited_children = False
