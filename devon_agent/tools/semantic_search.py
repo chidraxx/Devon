@@ -5,7 +5,7 @@ from devon_agent.agents.model import AnthropicModel, ModelArguments, OpenAiModel
 # import chromadb.utils.embedding_functions as embedding_functions
 import os
 
-from devon_agent.utils import encode_path
+from devon_agent.utils import encode_path, decode_path
 
 class SemanticSearch(Tool):
     def __init__(self):
@@ -22,17 +22,24 @@ class SemanticSearch(Tool):
 
     def setup(self, ctx):
         self.db_path = ctx["session"].db_path
-        # self.vectorDB = chromadb.PersistentClient(path=os.path.join(self.base_path, "vectorDB"))
-
-        agent : TaskAgent = ctx["session"].agent
-        api_key=agent.current_model.api_key
-        
-        self.vectorDB_path = os.path.join(self.db_path, "vectorDB")
-        self.graph_path = os.path.join(self.db_path, "graph/graph.pickle")
-        self.collection_name = ctx["session"].base_path
-        self.manager = CodeGraphManager(graph_storage_path=self.graph_path, db_path=self.vectorDB_path, root_path=encode_path(ctx["session"].base_path) , openai_api_key=os.environ.get("OPENAI_API_KEY"), api_key=api_key, model_name="haiku", collection_name=self.collection_name)
-        # self.manager.create_graph()
-        
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+        self.mapper = os.path.join(self.db_path, "project_mapper.json")
+        self.storage_path = os.path.join(self.db_path, encode_path(ctx["session"].base_path, self.mapper))
+        self.vectorDB_path = os.path.join(self.storage_path, "vectorDB")
+        self.graph_path = os.path.join(self.storage_path, "graph")
+        self.collection_name = "collection"
+        print(self.vectorDB_path)
+        print("storage_path", self.storage_path)
+        self.manager = CodeGraphManager(
+            graph_storage_path=self.graph_path, 
+            db_path=self.vectorDB_path, 
+            root_path=ctx["session"].base_path, 
+            openai_api_key=os.getenv("OPENAI_API_KEY"), 
+            api_key=api_key, 
+            model_name="haiku", 
+            collection_name=self.collection_name
+        )
+        self.manager.create_graph(create_new=False)
         
     def cleanup(self, ctx):
         try:

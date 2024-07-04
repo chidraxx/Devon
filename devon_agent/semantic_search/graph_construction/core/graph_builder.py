@@ -2,6 +2,7 @@
 import hashlib
 import json
 import os
+import tiktoken
 import uuid
 import pickle
 
@@ -16,6 +17,7 @@ from devon_agent.semantic_search.graph_construction.languages.cpp.cpp_parser imp
 from devon_agent.semantic_search.graph_construction.languages.go.go_parser import GoParser
 from devon_agent.semantic_search.graph_construction.core.base_parser import BaseParser
 from devon_agent.semantic_search.constants import extension_to_language
+from devon_agent.semantic_search.constants import supported_noncode_extentions
 
 # Import other parsers as needed, e.g., JavaScriptParser, etc.
 
@@ -29,6 +31,7 @@ class GraphConstructor:
         self.ignore_dirs = ignore_dirs if ignore_dirs else []
 
         self.supported_extentions = ['.py', '.js', '.jsx', '.ts', '.tsx', '.java', '.cpp', '.cxx', '.cc', '.hpp', '.h', '.go']
+        self.supported_noncode_extentions = supported_noncode_extentions
         self.parser : BaseParser = None
 
         # # Choose the appropriate parser based on the language
@@ -52,6 +55,12 @@ class GraphConstructor:
             self.hashes = self.load_hashes(self.hash_path)
             print("Number of nodes in graph", len(self.graph.nodes))
 
+
+    @staticmethod
+    def count_tokens(text: str) -> int:
+        encoding = tiktoken.get_encoding("cl100k_base")
+        num_tokens = len(encoding.encode(text))
+        return num_tokens
 
     @staticmethod
     def parser_matcher(extension: str) -> BaseParser:
@@ -131,11 +140,6 @@ class GraphConstructor:
                 if 'path' in self.graph.nodes[child]
             }
 
-            # print(children_in_graph)
-
-
-            # print("dir path", dir_path)
-
             dirs, files = [], []
             
             for entry in os.scandir(dir_path):
@@ -148,14 +152,26 @@ class GraphConstructor:
                 elif entry.is_file():
                     # Check file extension before processing
                     file_extension = os.path.splitext(entry.name)[len(os.path.splitext(entry.name)) - 1]
+
                     if file_extension in self.supported_extentions:
-                        files.append(entry.path)
+                        with open(entry.path, 'r') as f:
+                            content = f.read()
+                            char_count = len(content)
+                            
+                            if char_count <= 350000:
+                                files.append(entry.path)
+                       
+                    elif file_extension in self.supported_noncode_extentions:
+                        with open(entry.path, 'r') as f:
+                            content = f.read()
+                            char_count = len(content)
+                            
+                            if char_count <= 70000:
+                                files.append(entry.path)
             
             # Process directories
-            # print(children_in_graph.keys())
             for sub_dir in dirs:
                 # print(sub_dir)
-                # print("sub_dir", sub_dir)
 
                 if sub_dir not in children_in_graph.keys():
                     # Create the directory node if it doesn't exist in the graph
@@ -193,13 +209,11 @@ class GraphConstructor:
                     
 
         root_node_id = self.graph.graph.get('root_id')
-        # print("rood_id", root_node_id)
         # children_in_graph = {
         #     self.graph.nodes[child]['path']: child
         #     for child in list(self.graph.successors(root_node_id))
         #     if 'path' in self.graph.nodes[child]
         # }
-        # print("sss", children_in_graph)
         # Find or create the root directory node
         if root_node_id is None:
             for node_id, data in self.graph.nodes(data=True):
@@ -218,9 +232,7 @@ class GraphConstructor:
         if (self.graph.nodes[node_id]["type"] == "file"):
             if actions is not None:
                 actions["delete"].append((self.graph.nodes[node_id]["path"], node_id))
-            # print("deleting file", self.graph.nodes[node_id]["path"])
         elif (self.graph.nodes[node_id]["type"] == "directory"):
-            # print("deleting dir", self.graph.nodes[node_id]["path"])
             pass
         children = list(self.graph.successors(node_id))
         for child in children:
@@ -234,20 +246,17 @@ class GraphConstructor:
         directory_node_id = directory_node["attributes"]["node_id"]
         self.graph.add_node(directory_node_id, **directory_node["attributes"])
 
-        # print(self.graph.nodes[directory_node_id])
 
         if parent_node_id is not None:
             self.graph.add_edge(parent_node_id, directory_node_id, type="CONTAINS")
 
         # if parent_node_id == self.graph.graph.get('root_id'):
-        #     print("here")
 
         #     children_in_graph = {
         #         self.graph.nodes[child]['path']: child
         #         for child in list(self.graph.successors(parent_node_id))
         #         if 'path' in self.graph.nodes[child]
         #     }
-        #     print("sucessors", children_in_graph)
 
         return directory_node_id
 
@@ -261,9 +270,6 @@ class GraphConstructor:
         for file in actions["delete"]:
             self.process_file(file, action="delete")
         
-        # self.save_graph(self.graph_path)
-        # self.hashes = current_hashes  # Update self.hashes with the current hashes
-        # self.save_hashes(self.hash_path, self.hashes)
 
         return actions, current_hashes  # Return the actions list
 
@@ -286,15 +292,31 @@ class GraphConstructor:
         file_path = parent_id_and_file_path[0]
         file_extension = os.path.splitext(file_path)[len(os.path.splitext(file_path)) - 1]
         try:
-            
+            if file_extension in self.supported_noncode_extentions:
+                # return
+                node= {}
+                node["file_path"] = file_path
+                node["path"] = file_path
+                node["level"] = self.graph.nodes[parent_id].get("level", 0) + 1
+                node["leaf"] = True
+                node['type'] = "file"
+                node['lang'] = "no_code"
+                node['node_id'] = self.node_id = str(uuid.uuid4())
+
+                with open(file_path, 'r') as f:
+                    node["text"] = f.read()
+
+                self.graph.add_node(node["node_id"], **node)
+                self.graph.add_edge(parent_id, node["node_id"], type="CONTAINS")
+                return True
+
             self.parser = GraphConstructor.parser_matcher(file_extension)
             print(file_path)
             nodes, relationships = self.parser.parse_file(file_path, self.root_path, {}, {}, level=0)
-            # print(nodes)
 
         except Exception as e:
             print(e, file_path)
-            raise e
+            # raise e
             return False
 
         if len(nodes) == 0:
@@ -309,11 +331,9 @@ class GraphConstructor:
                 raise Exception(f"extention '{(file_extension)}' is not supported: {file_path}")
             
             node["attributes"]['lang'] = extension_to_language.get(file_extension)
-            # print("creating node")
             self.graph.add_node(node["attributes"]["node_id"], **node["attributes"])
         
         for relationship in relationships:
-            # print("creating relationship")
             self.graph.add_edge(relationship["sourceId"], relationship["targetId"], type=relationship["type"])
         
         self.graph.add_edge(parent_id, nodes[0]["attributes"]["node_id"], type="CONTAINS")
@@ -331,7 +351,6 @@ class GraphConstructor:
                 break
         
         if node_id_to_remove is not None:
-            # print("removing node", file_path, node_id_to_remove)
             self.delete_file_or_dir(node_id_to_remove, None)
         else:
             print("Node to remove not found for path:", file_path)

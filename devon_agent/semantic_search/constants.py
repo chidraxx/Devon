@@ -24,6 +24,8 @@ extension_to_language = {
             '.xml': 'xml'
         }
 
+supported_noncode_extentions = [".md", ".json", ".sh", ".cargo", ".toml", ".config", ".yaml", ".yml", ".properties", "Dockerfile", ".dockerignore"]
+
 RELATIONS_TYPES_MAP = {
             "function_definition": "FUNCTION_DEFINITION",
             "class_definition": "CLASS_DEFINITION",

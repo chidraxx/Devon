@@ -8,8 +8,6 @@ import traceback
 from dataclasses import dataclass
 from typing import Any, List, Literal, Optional
 from devon_agent.agents.conversational_agent import ConversationalAgent
-
-
 from devon_agent.agents.default.agent import AgentArguments, TaskAgent
 from devon_agent.environment import LocalEnvironment, UserEnvironment
 from devon_agent.fossil_versioning import FossilVersioning
@@ -32,6 +30,7 @@ from devon_agent.tools.usertools import AskUserTool, RespondUserTool
 from devon_agent.tools.utils import get_ignored_files, read_file
 from devon_agent.utils import DotDict, Event, decode_path
 from devon_agent.tools.codenav import CodeGoTo, CodeSearch
+from devon_agent.tools.semantic_search import SemanticSearch
 
 
 # import chromadb
@@ -151,6 +150,7 @@ class Session:
                 "code_search": CodeSearch(),
                 "go_to_definition_or_references": CodeGoTo(),
                 "file_tree_display": FileTreeDisplay(),
+                "semantic_search": SemanticSearch(),
             }
         )
         local_environment.set_default_tool(ShellTool())
@@ -218,7 +218,7 @@ class Session:
 
     @classmethod
     def from_dict(cls, data, user_input, persist):
-        print(data)
+        # print(data)
         instance = cls(
             args=SessionArguments(
                 path=data["path"],
@@ -285,6 +285,7 @@ class Session:
             time.sleep(2)
 
     def run_event_loop(self):
+        
         while True and not (self.event_id == len(self.event_log)):
             if self.status == "terminating":
                 break

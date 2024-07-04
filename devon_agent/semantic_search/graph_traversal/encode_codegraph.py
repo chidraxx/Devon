@@ -1,6 +1,6 @@
 import asyncio
 from collections import deque
-from devon_agent.semantic_search.llm import run_model_completion, code_explainer_and_summary_prompt, code_explainer_and_summary_prompt_groq, code_summary_prompt, directory_summary_prompt
+from devon_agent.semantic_search.llm import config_text_summary_prompt_groq, config_text_explainer_prompt_groq, config_text_explainer_and_summary_prompt, run_model_completion, code_explainer_and_summary_prompt, code_explainer_prompt_groq, code_summary_prompt_groq, directory_summary_prompt
 import asyncio
 from collections import deque
 import openai
@@ -11,15 +11,18 @@ import yaml
 
 
 
+
 async def process_code_node(graph, node, model_name, api_key):
     node_data = graph.nodes[node]
     code = node_data.get("text", "")
+    lang = node_data.get("lang", "")
     retries = 8
     wait_time = 10  # seconds
     max_retries_no_status = 3  # max retries if exception does not have status_code attribute
     rate_limit_encountered = False
     doc = None
     summary = None
+    file_path = node_data.get("file_path")
 
     # Gather child summaries and signatures
     child_nodes = [target for _, target in graph.out_edges(node)]
@@ -35,10 +38,17 @@ async def process_code_node(graph, node, model_name, api_key):
     for attempt in range(retries):
         try:
             if model_name == "groq":
-                doc = await run_model_completion(model_name, api_key, code_explainer_and_summary_prompt_groq(code, children_summaries_text))
-                summary = await run_model_completion(model_name, api_key, code_summary_prompt(code))
+                if lang == "no_code":
+                    doc = await run_model_completion(model_name, api_key, config_text_explainer_prompt_groq(code, file_path))
+                    summary = await run_model_completion(model_name, api_key, config_text_summary_prompt_groq(code, file_path))
+                else:
+                    doc = await run_model_completion(model_name, api_key, code_explainer_prompt_groq(code, children_summaries_text))
+                    summary = await run_model_completion(model_name, api_key, code_summary_prompt_groq(code))
             else:
-                result = await run_model_completion(model_name, api_key, code_explainer_and_summary_prompt(code, children_summaries_text))
+                if lang == "no_code":
+                    result = await run_model_completion(model_name, api_key, config_text_explainer_and_summary_prompt(code, file_path))
+                else:
+                    result = await run_model_completion(model_name, api_key, code_explainer_and_summary_prompt(code, children_summaries_text))
                 doc_start = result.find("<description>") + len("<description>")
                 doc_end = result.find("</description>")
                 summary_start = result.find("<summary>") + len("<summary>")
@@ -75,9 +85,9 @@ async def process_code_node(graph, node, model_name, api_key):
     # print("==========")
     # print(f"Codeblock name: {node_data.get('signature')}, {node_data.get('type')}")
     # print("Level:", node_data.get("level"))
-    # print("Path:", node_data.get("path"))
-    # print(code)
-    # # print(doc)
+    # print("Path:", node_data.get("file_path"))
+    # # print(code)
+    # print(doc)
     # print()
 
     doc += "\n\n" + summary

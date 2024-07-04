@@ -233,7 +233,8 @@ UPDATING CODE: Use go_to_definition_or_references over code_search and search_di
 1. Open the file. Understand code's role: Use the tool "go_to_definition_or_references to identify" affected blocks and their connections.
 2. Assess impact: Analyze effects on codebase, identify potential conflicts or bugs, consult user if issues found.
 3. Plan update: Identify all blocks needing modification, ensure comprehensive understanding before proceeding.
-4. Implement and verify: Make changes systematically, review for requirements and side effects, revise if needed. Consider using no_op to think more about how you will update them
+4. Implement and verify: Make changes systematically, review for requirements and side effects, revise if needed.
+5. Use no_op tool to review at the end by again re-interpreting the users request and looking at what updates you made
 </UPDATING CODE GUIDLINE>
 
 <EDITOR>
