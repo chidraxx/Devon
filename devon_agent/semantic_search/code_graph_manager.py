@@ -166,11 +166,14 @@ class CodeGraphManager:
         
         def count_tokens(text: str) -> int:
             encoding = tiktoken.get_encoding("cl100k_base")
-            num_tokens = len(encoding.encode(text))
+            try:
+                num_tokens = len(encoding.encode(text, allowed_special={" "}, disallowed_special=(encoding.special_tokens_set - {" ", '<|endoftext|>'})))
+            except Exception as e:
+                print(f"Error encoding text: {e}")
+                num_tokens = 0
             return num_tokens
         
         self.graph_constructor = GraphConstructor(
-            # language,
             self.root_path,
             self.graph_storage_path,
             False,
@@ -188,17 +191,19 @@ class CodeGraphManager:
                 collect_node_ids(file_node_id, collected_ids)
                 all_collected_node_ids.update(collected_ids)
 
-
         input_token = 0
         for node_id in all_collected_node_ids:
-            input_token += count_tokens(self.graph_constructor.graph.nodes[node_id].get("text", ""))
+            try:
+                text = self.graph_constructor.graph.nodes[node_id].get("text", " ")
+                input_token += count_tokens(text)
+            except Exception as e:
+                print(f"Error calculating tokens for node {node_id}: {e}")
+                print("File path:", self.graph_constructor.graph.nodes[node_id].get("file_path", ""))
 
-        output_token = 0.5 * input_token # Rouch estimeation
+        output_token = 0.5 * input_token  # Rough estimation
 
         cost = model_cost(self.model_name, input_token, output_token)
-
         cost += model_cost(self.embedding_model_name, input_token, output_token)
-
 
         return cost
 
@@ -228,7 +233,11 @@ class CodeGraphManager:
             # Helper function to count tokens
             def count_tokens(text: str) -> int:
                 encoding = tiktoken.get_encoding("cl100k_base")
-                num_tokens = len(encoding.encode(text))
+                try:
+                    num_tokens = len(encoding.encode(text, allowed_special={" "}, disallowed_special=(encoding.special_tokens_set - {" ", '<|endoftext|>'})))
+                except Exception as e:
+                    print(f"Error encoding text: {e}")
+                    num_tokens = 0
                 return num_tokens
 
             def split_nodes(node_id, doc, code, node_data):
@@ -496,14 +505,37 @@ class CodeGraphManager:
 
             # Step 3: Run the agent with the formatted response
             agent_response = asyncio.run(
-                get_completion(agent_prompt(query_text, formatted_response), api_key=self.api_key, model="anthropic", size="large")
+                get_completion(agent_prompt(query_text, formatted_response), api_key=self.api_key, model="anthropic", size="medium")
             )
+
+            # agent_response = asyncio.run(
+            #      get_completion(agent_prompt(query_text, formatted_response), self.api_key, size = "medium" )
+            # )
 
             return agent_response
 
         except Exception as e:
             print(f"An error occurred while running the query and agent: {e}")
             raise
+
+    def format_response_for_llm(self, response):
+        try:
+            formatted_string = ""
+            for item in response:
+                metadata = item["metadata"]
+                document = item["combined_text"]
+                code = document.split("--code-- - \n")[1]
+                formatted_string += f"path: {metadata.get('file_path')}\n"
+                formatted_string += f"signature: {metadata.get('signature')}\n"
+                formatted_string += f"start line: {metadata.get('start_line')}\n"
+                formatted_string += f"end line: {metadata.get('end_line')}\n"
+                formatted_string += f"code: \n{code}\n\n"
+            return formatted_string
+        except Exception as e:
+            print(f"An error occurred while formatting the response: {e}")
+        raise
+
+
 
 
     def generate_embeddings(self, docs):
@@ -528,7 +560,7 @@ class CodeGraphManager:
 if __name__ == "__main__":
     # try:
         # Initialize the CodeGraphManager
-        root_path = "/Users/arnav/Desktop/codegraph/code-base-agent/src/blar_graph/graph_construction/utils"
+        root_path = "/Users/arnav/Desktop/langchain/langchain"
         # root_path = "/Users/arnav/Desktop/codegraph/core/max"
 
         graph_storage_path = os.path.join(root_path, "graph")
@@ -539,7 +571,9 @@ if __name__ == "__main__":
         collection_name = "collection"
 
         manager = CodeGraphManager(graph_storage_path, db_path, root_path, openai_api_key, anthropic_api_key, "haiku", collection_name)
-        manager.create_graph(create_new=True)
+        # manager.create_graph(create_new=False)
+        # result = (manager.query_and_run_agent("what is the app about"))
+        # print(result)
 
         print(manager.estimate_cost())
 

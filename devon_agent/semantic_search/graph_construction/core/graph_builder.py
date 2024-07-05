@@ -154,12 +154,17 @@ class GraphConstructor:
                     file_extension = os.path.splitext(entry.name)[len(os.path.splitext(entry.name)) - 1]
 
                     if file_extension in self.supported_extentions:
-                        with open(entry.path, 'r') as f:
-                            content = f.read()
-                            char_count = len(content)
-                            
-                            if char_count <= 350000:
-                                files.append(entry.path)
+                        try:
+                            with open(entry.path, 'r', encoding='utf-8') as f:
+                                content = f.read()
+                                char_count = len(content)
+                                
+                                if char_count <= 350000:
+                                    files.append(entry.path)
+                        
+                        except UnicodeDecodeError:
+                            print(f"Skipping file {entry.path} due to encoding issues.")
+                            continue
                        
                     elif file_extension in self.supported_noncode_extentions:
                         with open(entry.path, 'r') as f:

@@ -120,6 +120,14 @@ async def get_completion(messages, api_key, size = "small", model="anthropic"):
                     temperature=0.5,
                     api_key=api_key
                 )
+            elif size == "medium":
+                response = await acompletion(
+                    model="claude-3-5-sonnet-20240620",
+                    messages=messages,
+                    temperature=0.5,
+                    max_tokens=4096,
+                    api_key=api_key
+                )
             else:
                 response = await acompletion(
                     model="claude-3-opus-20240229",
@@ -266,7 +274,8 @@ async def main():
 #   idk.py: The code defines a function `idk` that removes non-ASCII characters from
 #     the input text using a regular expression. The purpose i)s to clean up the text
 #     by removing any non-standard characters.""")))
-    api_key = os.getenv("GROQ_API_KEY")
+    # api_key = os.getenv("GROQ_API_KEY")
+    api_key = os.getenv("ANTHROPIC_API_KEY")
     code = """
 <!-- PROJECT LOGO -->
 <div align="center">
@@ -304,12 +313,13 @@ https://github.com/entropy-research/Devon/assets/61808204/f3197a56-3d6d-479f-bc0
 
 
 """
-    doc = await run_model_completion("groq", api_key, config_text_explainer_prompt_groq(code, "Devon/Readme.md"))
-    summary = await run_model_completion("groq", api_key, config_text_summary_prompt_groq(code, "Devon/Readme.md"))
+    # doc = await run_model_completion("groq", api_key, config_text_explainer_prompt_groq(code, "Devon/Readme.md"))
+    # summary = await run_model_completion("groq", api_key, config_text_summary_prompt_groq(code, "Devon/Readme.md"))
 
-    print(doc)
-    print()
-    print(summary)
+    print(await get_completion(config_text_explainer_and_summary_prompt(code, ""), api_key, size = "medium" ))
+    # print(doc)
+    # print()
+    # print(summary)
 
 if __name__ == "__main__":
     asyncio.run(main())
