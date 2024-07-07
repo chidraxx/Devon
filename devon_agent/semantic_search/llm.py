@@ -87,8 +87,68 @@ start with- The directory [name of the directory]""", "role": "system"},
 
 
 def agent_prompt(question, tool_response):
-    message = [{"content": f"You are a senior software engineer who is expert in understanding large codebases. You are serving a user who asked a question about a codebase they have no idea about. We did semantic search with their question on the codebase through our tool and we are giving you the output of the tool. The tool's response will not be fully accurate. Only choose the code that looks right to you while formulating the answer. Your job is to frame the answer properly by looking at all the different code blocks and give a final answer. Your job is to make the user understand the new codebase, so whenever you are talking about an important part of the codebase mention the full file path and codesnippet, like the whole code of a small function or the relavent section of a large function, which will be given along with the code in the tool output", "role": "system"},
+    message = [{"content": f"""
+                You are a senior software engineer who is expert in understanding large codebases. You are serving a user who asked a question about a codebase they have no idea about. We did semantic search with their question on the codebase through our tool and we are giving you the output of the tool. The tool's response will not be fully accurate. Only choose the code that looks right to you while formulating the answer. Your job is to frame the answer properly by looking at all the different code blocks and give a final answer. Your job is to make the user understand the new codebase, so whenever you are talking about an important part of the codebase mention the full file path and codesnippet, like the whole code of a small function or the relavent section of a large function, which will be given along with the code in the tool output
+                
+                """, "role": "system"},
                 {"content": f"The user's question: {question}\n\nOur tool's response: {tool_response} \n\n Remember, be sure to give us relavent code snippets along with file path while formulating an answer", "role": "user"}]
+    
+    return message
+
+def agent_prompt_v2(question, tool_response):
+    message = [{"content": f"""
+                You are a senior software engineer who is expert in understanding large codebases. You are serving a user who asked a question about a codebase they have no idea about.
+                 We did semantic search with their question on the codebase through our tool and we are giving you the output of the tool. The tool's response will not be fully accurate. Only choose the code that looks right to you while formulating the answer. Your job is to frame the answer properly by looking at all the different code blocks and give a final answer. Your job is to make the user understand the new codebase, so whenever you are talking about an important part of the codebase mention the full file path and codesnippet, like the whole code of a small function or the relavent section of a large function, which will be given along with the code in the tool output. Your job is not to write any code.
+                DO NO WRITE OR GENERATE ANY NEW CODE. JUST DISPLAY THE RELEVANT CODE SNIPPETS FROM THE CODE YOU GET
+                """, "role": "system"},
+                {"content": f"""The user's question: {question}
+                \nRelevant files, directories, and code snippets have been identified through our semantic search tool, which analyzed the codebase based on your question. While this information is comprehensive, please note that it may not be entirely precise. Tool Response:
+                {tool_response}
+                \n Remember, be sure to give us relavent code snippets along with file path while formulating an answer""", "role": "user"}]
+    
+    return message
+
+
+def agent_prompt_v3(question, tool_response):
+    message = [
+        {
+            "role": "system",
+            "content": """
+You are a senior software engineer expert in understanding large codebases. Your task is to assist a user unfamiliar with a specific codebase. We've performed a semantic search based on their question and will provide you with the results.
+
+Your responsibilities:
+1. Analyze the provided code snippets and information.
+2. Select and display only the most relevant existing code snippets.
+3. Explain the purpose and functionality of these snippets within the larger codebase.
+4. Guide the user's understanding by referencing full file paths and specific code sections.
+
+Important instructions:
+- DO NOT write, generate, or suggest any new code.
+- Only use and explain the code snippets provided in the tool's response.
+- If you can't find a direct answer in the provided snippets, explain what is available and how it might relate to the user's question.
+- Always include file paths when referencing code.
+
+Your goal is to help the user understand the existing codebase structure and functionality, not to develop new solutions.
+            """
+        },
+        {
+            "role": "user",
+            "content": f"""
+The user's question: {question}
+
+Relevant files, directories, and code snippets have been identified through our semantic search tool, which analyzed the codebase based on your question. While this information is comprehensive, it may not be entirely precise.
+
+Tool Response:
+{tool_response}
+
+Remember:
+1. Only display and explain relevant existing code snippets from the tool's response.
+2. Always include file paths when referencing code.
+3. Provide your reasoning on how these snippets relate to the user's question.
+4. Do not generate or suggest any new code.
+            """
+        }
+    ]
     
     return message
 
@@ -136,6 +196,23 @@ async def get_completion(messages, api_key, size = "small", model="anthropic"):
                     max_tokens=4096,
                     api_key=api_key
                 )
+        elif model == "groq":
+            # os.environ["GROQ_API_KEY"] = api_key
+            if size == "small":
+                response = await acompletion(
+                    model="groq/llama3-8b-8192",
+                    messages=messages,
+                    temperature=0.5,
+                    api_key=api_key
+                )
+            else:
+                response = await acompletion(
+                    model="groq/llama3-70b-8192",
+                    messages=messages,
+                    temperature=0.5,
+                    max_tokens=4096,
+                    api_key=api_key
+                )
         else:
             raise ValueError("Invalid model specified and no valid API keys found.")
 
@@ -147,7 +224,7 @@ async def get_completion(messages, api_key, size = "small", model="anthropic"):
         # return {"error": str(e)}
         raise e
     
-async def get_completion_groq(messages, size = "small", model="llama-3-8b"):
+async def get_completion_groq(messages, size = "small"):
     try:
 
         # if size == "small":
@@ -178,10 +255,17 @@ async def get_completion_groq(messages, size = "small", model="llama-3-8b"):
 
 
 async def run_model_completion(model_name, api_key, prompt):
-    if model_name == "groq":
-        return await get_completion_groq(prompt, model="anthropic")
-    else:
-        return await get_completion(prompt, api_key)
+
+    if model_name == "haiku":
+        return await get_completion(prompt, api_key, model="anthropic", size="small")
+    elif model_name == "sonnet":
+        return await get_completion(prompt, api_key, model="anthropic", size="medium")
+    elif model_name == "gpt-4o":
+        return await get_completion(prompt, api_key, model="openai", size="medium")
+    elif model_name == "groq-8b":
+        return await get_completion(prompt, api_key, model="groq", size="small")
+    elif model_name == "groq-70b":
+        return await get_completion(prompt, api_key, model="groq", size="large")
     
 def model_cost(model_name, input, output):
     #per million tokens

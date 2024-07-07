@@ -37,7 +37,7 @@ async def process_code_node(graph, node, model_name, api_key):
 
     for attempt in range(retries):
         try:
-            if model_name == "groq":
+            if model_name == "groq-8b":
                 if lang == "no_code":
                     doc = await run_model_completion(model_name, api_key, config_text_explainer_prompt_groq(code, file_path))
                     summary = await run_model_completion(model_name, api_key, config_text_summary_prompt_groq(code, file_path))
@@ -413,13 +413,13 @@ def save_graph(graph, graph_path):
     with open(graph_path, 'wb') as f:
         pickle.dump(graph, f)
 
-# graph = load_graph("/Users/arnav/Desktop/devon/Devon/graph/graph.pickle")
+# graph = load_graph("/Users/arnav/Library/Application Support/Devon(Alpha)/7ad57a2e581475a1ee59df22c862d69f0a51423ae4a9a3276163934d1a329271/graph/graph.pickle")
 # # asyncio.run(process_directory_node(graph, graph.graph["root_id"], 'haiku'))
 # reset_directory_summaries(graph)
 # root_id = graph.graph["root_id"]
 # asyncio.run(create_advanced_directory_summary(graph, root_id, "haiku"))
 # save_graph(graph, "/Users/arnav/Desktop/devon/Devon/graph/graph.pickle")
-# # reset_directory_summaries()
+# reset_directory_summaries()
         
 
 # import tree_sitter_languages

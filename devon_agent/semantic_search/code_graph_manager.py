@@ -1,6 +1,4 @@
-import anyio
 import uuid
-import networkx as nx
 import chromadb
 import asyncio
 import tiktoken
@@ -9,10 +7,11 @@ from devon_agent.semantic_search.graph_traversal.encode_codegraph import (genera
 from devon_agent.semantic_search.graph_traversal.value_extractor import (extract_chromadb_values)
 import chromadb.utils.embedding_functions as embedding_functions
 import os
-from devon_agent.semantic_search.llm import get_completion, agent_prompt
+from  devon_agent.semantic_search.llm import run_model_completion, get_completion, agent_prompt, agent_prompt_v2, agent_prompt_v3
 from devon_agent.semantic_search.constants import extension_to_language
 import time
 from devon_agent.semantic_search.llm import model_cost
+from devon_agent.semantic_search.graph_construction.core.reranker import rerank_documents
 
 class CodeGraphManager:
     def __init__(self, graph_storage_path, db_path, root_path, openai_api_key, api_key, model_name, collection_name):
@@ -122,7 +121,7 @@ class CodeGraphManager:
             self.root_path,
             self.graph_storage_path,
             not create_new_graph,  # Pass False to create new graph if needed
-            ignore_dirs=["__pycache__", "devon_swe_bench_experimental"]
+            ignore_dirs=["__pycache__"]
         )
 
         # Build or update the graph and get the actions list
@@ -295,7 +294,9 @@ class CodeGraphManager:
                     "file_node_id": node_data.get("file_node_id", ""),
                     "signature": node_data.get("signature", ""),
                     "leaf": node_data.get("leaf", ""),
-                    "lang": node_data.get("lang", "")
+                    "lang": node_data.get("lang", ""),
+                    "code": node_data.get("text", ""),
+                    "doc": node_data.get("doc", "")
                 }
 
                 if metadata is None:
@@ -392,13 +393,12 @@ class CodeGraphManager:
                 
                 
 
-
         except Exception as e:
             print(f"An error occurred while updating the collection: {e}")
             raise
 
 
-    def query_collection(self, query_text):
+    def query_collection(self, query_text, top_n):
         # Helper function to combine split nodes
         processed_nodes=set()
         def combine_split_nodes(collection, documents, metadatas):
@@ -406,6 +406,8 @@ class CodeGraphManager:
 
             for doc, metadata in zip(documents, metadatas):
                 node_id = metadata.get("node_id")
+
+                # print(metadata)
 
                 if node_id in processed_nodes:
                     continue
@@ -445,8 +447,8 @@ class CodeGraphManager:
 
                     combined_text = f"documentation - \n{doc_part} \n{code_part}"
                     combined_results.append({
-                        "doc": doc_part,
-                        "code": code_part,
+                        "doc": doc_part.get("doc", ""),
+                        "code": metadata.get("text", ""),
                         "metadata": metadata,
                         "combined_text": combined_text
                     })
@@ -459,13 +461,21 @@ class CodeGraphManager:
             collection = self.db_client.get_collection(name=collection_name, embedding_function=self.openai_ef)
             
             print("starting fetch")
-            result = collection.query(query_texts=[query_text], n_results=10)
+            result = collection.query(query_texts=[query_text], n_results=top_n)
             print("finished fetch")
 
             documents = result["documents"][0]
             metadatas = result["metadatas"][0]
 
             combined_results = combine_split_nodes(collection, documents, metadatas)
+
+            self.format_response_for_llm(combined_results)
+
+            # print("===========")
+
+            # reranked = rerank_documents(query_text, documents, metadatas, "/Users/arnav/Desktop/codegraph processed/devon/v1")
+
+            # self.format_response_for_llm(reranked)
 
             return combined_results
 
@@ -492,7 +502,8 @@ class CodeGraphManager:
                 # self.db_client.create_collection(name=self.collection_name, embedding_function=self.openai_ef)
 
             # Step 1: Run the query method
-            combined_results = self.query_collection(query_text)
+            combined_results = self.query_collection(query_text, top_n = 35)
+            # combined_results = []
 
             # for result in combined_results:
             #     result["metadata"]["code"]=""
@@ -503,14 +514,32 @@ class CodeGraphManager:
             # Step 2: Format the response
             formatted_response = self.format_response_for_llm(combined_results)
 
+
+            # async def run_agents():
+
+                
+
+            #     # task1 = run_model_completion("groq-70b", self.api_key, agent_prompt(query_text, formatted_response))
+            #     task2 = run_model_completion("sonnet", self.api_key, agent_prompt_v2(query_text, formatted_response))
+            #     results = await asyncio.gather(task2, task2)
+            #     return results
+            
+
+            # agent_response1, agent_response2 = asyncio.run(run_agents())
+
             # Step 3: Run the agent with the formatted response
+            agent_response=""
             agent_response = asyncio.run(
-                get_completion(agent_prompt(query_text, formatted_response), api_key=self.api_key, model="anthropic", size="medium")
+                run_model_completion("sonnet", self.api_key, agent_prompt_v2(query_text, formatted_response))
             )
 
-            # agent_response = asyncio.run(
+            # agent_
+            # response = asyncio.run(
             #      get_completion(agent_prompt(query_text, formatted_response), self.api_key, size = "medium" )
             # )
+            print()
+            print()
+            print("=============================")
 
             return agent_response
 
@@ -521,21 +550,25 @@ class CodeGraphManager:
     def format_response_for_llm(self, response):
         try:
             formatted_string = ""
+            for item in range(len(response)):
+                metadata = response[item]["metadata"]
+                print(metadata.get('file_path'))
+                print(metadata.get('signature'))
+                # print(metadata.get('start_line'))
+                # print(metadata.get('end_line'))
+                # print(metadata.get('doc'))
+
             for item in response:
                 metadata = item["metadata"]
-                document = item["combined_text"]
-                code = document.split("--code-- - \n")[1]
                 formatted_string += f"path: {metadata.get('file_path')}\n"
                 formatted_string += f"signature: {metadata.get('signature')}\n"
                 formatted_string += f"start line: {metadata.get('start_line')}\n"
                 formatted_string += f"end line: {metadata.get('end_line')}\n"
-                formatted_string += f"code: \n{code}\n\n"
+                formatted_string += f"code: \n{metadata.get('text')}\n\n"
             return formatted_string
         except Exception as e:
             print(f"An error occurred while formatting the response: {e}")
         raise
-
-
 
 
     def generate_embeddings(self, docs):
@@ -560,23 +593,61 @@ class CodeGraphManager:
 if __name__ == "__main__":
     # try:
         # Initialize the CodeGraphManager
-        root_path = "/Users/arnav/Desktop/langchain/langchain"
-        # root_path = "/Users/arnav/Desktop/codegraph/core/max"
+        # root_path = "/Users/arnav/Desktop/codegraph processed/devon/v2"
+        
+
+        # graph_storage_path = os.path.join(root_path, "graph")
+        # db_path = os.path.join(root_path, "vectorDB")
+
+        # openai_api_key = os.getenv("OPENAI_API_KEY")
+        # anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
+        # collection_name = "collection"
+
+        # # root_path = "/Users/arnav/Desktop/devon/Devon"
+        # manager = CodeGraphManager(graph_storage_path, db_path, root_path, openai_api_key, anthropic_api_key, "haiku", collection_name)
+        # # manager.create_graph(create_new=False)
+        # # result = (manager.query_and_run_agent("What are tools"))
+        # # result = (manager.query_and_run_agent("Is the codebase using jupiter notebooks"))
+        # # result = (manager.query_and_run_agent("How to integrate a tools"))
+        # result = (manager.query_and_run_agent("how to create an environment for juipter notebook"))
+        # # result = (manager.query_and_run_agent("How to create an environment"))
+        # # result = (manager.query_and_run_agent("What are environments"))
+        # # print(result)
+
+        # print(manager.estimate_cost())
+
+        # root_path = "/Users/arnav/Desktop/codegraph processed/devon/v3"
+
+        # graph_storage_path = os.path.join(root_path, "graph")
+        # db_path = os.path.join(root_path, "vectorDB")
+
+        # openai_api_key = os.getenv("OPENAI_API_KEY")
+        # anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
+        # collection_name = "collection"
+
+        # root_path = "/Users/arnav/Desktop/devon/Devon"
+        # manager = CodeGraphManager(graph_storage_path, db_path, root_path, openai_api_key, anthropic_api_key, "haiku", collection_name)
+        # # manager.create_graph(create_new=False)
+
+        # result = (manager.query_and_run_agent("show me all the files that have llm prompts"))
+        # print(result)
+        
+
+        root_path = "/Users/arnav/Desktop/codegraph processed/devon/v1"
 
         graph_storage_path = os.path.join(root_path, "graph")
-        db_path = os.path.join(root_path, "db_storage")
+        db_path = os.path.join(root_path, "vectorDB")
 
         openai_api_key = os.getenv("OPENAI_API_KEY")
         anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
         collection_name = "collection"
 
+        root_path = "/Users/arnav/Desktop/devon/Devon"
         manager = CodeGraphManager(graph_storage_path, db_path, root_path, openai_api_key, anthropic_api_key, "haiku", collection_name)
         # manager.create_graph(create_new=False)
-        # result = (manager.query_and_run_agent("what is the app about"))
-        # print(result)
 
-        print(manager.estimate_cost())
-
+        result = (manager.query_and_run_agent("How to add a tool"))
+        print(result)
 
         # print(openai_ef([" "]))
 
