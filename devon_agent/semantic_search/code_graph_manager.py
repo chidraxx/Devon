@@ -9,10 +9,11 @@ from devon_agent.semantic_search.graph_traversal.encode_codegraph import (genera
 from devon_agent.semantic_search.graph_traversal.value_extractor import (extract_chromadb_values)
 import chromadb.utils.embedding_functions as embedding_functions
 import os
-from devon_agent.semantic_search.llm import get_completion, agent_prompt
+from devon_agent.semantic_search.llm import get_completion, agent_prompt, run_model_completion, code_summary_prompt_groq
 from devon_agent.semantic_search.constants import extension_to_language
 import time
 from devon_agent.semantic_search.llm import model_cost
+from devon_agent.semantic_search.graph_construction.core.reranker import rerank_documents
 
 class CodeGraphManager:
     def __init__(self, graph_storage_path, db_path, root_path, openai_api_key, api_key, model_name, collection_name):
@@ -20,7 +21,7 @@ class CodeGraphManager:
             raise ValueError("OpenAI API key is missing.")
         if not api_key:
             raise ValueError("API key is missing.")
-        if model_name not in ["haiku", "groq"]:
+        if model_name not in ["haiku", "groq-8b"]:
             raise ValueError("Unsupported model. Only 'haiku' and 'groq' are supported.")
         
         self.graph_storage_path = graph_storage_path
@@ -122,7 +123,7 @@ class CodeGraphManager:
             self.root_path,
             self.graph_storage_path,
             not create_new_graph,  # Pass False to create new graph if needed
-            ignore_dirs=["__pycache__", "devon_swe_bench_experimental"]
+            ignore_dirs=["__pycache__"]
         )
 
         # Build or update the graph and get the actions list
@@ -133,7 +134,10 @@ class CodeGraphManager:
 
 
         # Generate documentation for the updated graph
-        asyncio.run(generate_doc_level_wise(self.graph_constructor.graph, actions, api_key=self.api_key, model_name=self.model_name))
+        batch_size = 50
+        if self.model_name == "groq-8b":
+            batch_size = 5
+        asyncio.run(generate_doc_level_wise(self.graph_constructor.graph, actions, api_key=self.api_key, model_name=self.model_name, batch_size=batch_size))
 
         # Update the collection
         self.update_collection(actions)
@@ -295,7 +299,9 @@ class CodeGraphManager:
                     "file_node_id": node_data.get("file_node_id", ""),
                     "signature": node_data.get("signature", ""),
                     "leaf": node_data.get("leaf", ""),
-                    "lang": node_data.get("lang", "")
+                    "lang": node_data.get("lang", ""),
+                    "code": node_data.get("text", ""),
+                    "doc": node_data.get("doc", ""),
                 }
 
                 if metadata is None:
@@ -398,7 +404,7 @@ class CodeGraphManager:
             raise
 
 
-    def query_collection(self, query_text):
+    def query_collection(self, query_text, n_results = 10):
         # Helper function to combine split nodes
         processed_nodes=set()
         def combine_split_nodes(collection, documents, metadatas):
@@ -459,7 +465,7 @@ class CodeGraphManager:
             collection = self.db_client.get_collection(name=collection_name, embedding_function=self.openai_ef)
             
             print("starting fetch")
-            result = collection.query(query_texts=[query_text], n_results=10)
+            result = collection.query(query_texts=[query_text], n_results=n_results)
             print("finished fetch")
 
             documents = result["documents"][0]
@@ -492,7 +498,7 @@ class CodeGraphManager:
                 # self.db_client.create_collection(name=self.collection_name, embedding_function=self.openai_ef)
 
             # Step 1: Run the query method
-            combined_results = self.query_collection(query_text)
+            combined_results = self.query_collection(query_text, n_results = 50)
 
             # for result in combined_results:
             #     result["metadata"]["code"]=""
@@ -500,12 +506,21 @@ class CodeGraphManager:
             #     result["metadata"]["doc"]=""
             #     print(result["metadata"])
 
-            # Step 2: Format the response
-            formatted_response = self.format_response_for_llm(combined_results)
 
-            # Step 3: Run the agent with the formatted response
+            for i in range(len(combined_results)):
+                print(combined_results[i]["metadata"]["file_path"])
+
+            reranked = rerank_documents(query_text, [doc["combined_text"] for doc in combined_results], [metadata["metadata"] for metadata in combined_results], "/Users/arnav/Desktop/codegraph processed/devon/v1")
+
+            print("===================")
+
+            # Step 2: Format the response
+            formatted_response = self.format_response_for_llm(reranked[:10])
+
+            # # Step 3: Run the agent with the formatted response
+            agent_response=""
             agent_response = asyncio.run(
-                get_completion(agent_prompt(query_text, formatted_response), api_key=self.api_key, model="anthropic", size="medium")
+                run_model_completion("sonnet", self.api_key, agent_prompt(query_text, formatted_response))
             )
 
             # agent_response = asyncio.run(
@@ -521,19 +536,25 @@ class CodeGraphManager:
     def format_response_for_llm(self, response):
         try:
             formatted_string = ""
+            for item in range(len(response)):
+                metadata = response[item]["metadata"]
+                print(metadata.get("file_path", " ddddd"))
             for item in response:
                 metadata = item["metadata"]
-                document = item["combined_text"]
-                code = document.split("--code-- - \n")[1]
+                code = item["doc"]
+                # print(code)
+                # document = item["combined_text"]
+                # code = document.split("--code-- - \n")[1]
                 formatted_string += f"path: {metadata.get('file_path')}\n"
                 formatted_string += f"signature: {metadata.get('signature')}\n"
                 formatted_string += f"start line: {metadata.get('start_line')}\n"
                 formatted_string += f"end line: {metadata.get('end_line')}\n"
                 formatted_string += f"code: \n{code}\n\n"
+                # formatted_string += f"code: \n{metadata.get('code')}\n\n"
             return formatted_string
         except Exception as e:
             print(f"An error occurred while formatting the response: {e}")
-        raise
+        raise e
 
 
 
@@ -560,22 +581,28 @@ class CodeGraphManager:
 if __name__ == "__main__":
     # try:
         # Initialize the CodeGraphManager
-        root_path = "/Users/arnav/Desktop/langchain/langchain"
+        root_path = "/Users/arnav/Desktop/codegraph processed/devon/v1"
         # root_path = "/Users/arnav/Desktop/codegraph/core/max"
 
         graph_storage_path = os.path.join(root_path, "graph")
-        db_path = os.path.join(root_path, "db_storage")
+        db_path = os.path.join(root_path, "vectorDB")
 
         openai_api_key = os.getenv("OPENAI_API_KEY")
         anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
         collection_name = "collection"
+        # model_name = "groq-8b"
+        model_name = "haiku"
+        groq_api_key = os.getenv("GROQ_API_KEY")
+        
 
-        manager = CodeGraphManager(graph_storage_path, db_path, root_path, openai_api_key, anthropic_api_key, "haiku", collection_name)
+        root_path = "/Users/arnav/Desktop/devon/Devon"
+
+        manager = CodeGraphManager(graph_storage_path, db_path, root_path, openai_api_key, anthropic_api_key, model_name, collection_name)
         # manager.create_graph(create_new=False)
-        # result = (manager.query_and_run_agent("what is the app about"))
-        # print(result)
+        result = (manager.query_and_run_agent("How can I add a find and replace tool"))
+        print(result)
 
-        print(manager.estimate_cost())
+        # print(manager.estimate_cost()) 
 
 
         # print(openai_ef([" "]))

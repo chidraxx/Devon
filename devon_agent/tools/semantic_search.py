@@ -39,7 +39,7 @@ class SemanticSearch(Tool):
             model_name="haiku", 
             collection_name=self.collection_name
         )
-        self.manager.create_graph(create_new=False)
+        # self.manager.create_graph(create_new=False)
         
     def cleanup(self, ctx):
         try:

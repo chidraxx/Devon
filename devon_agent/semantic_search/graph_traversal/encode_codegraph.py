@@ -7,8 +7,16 @@ import openai
 import os
 import pickle
 import yaml
+import tiktoken
 
-
+def count_tokens(text: str) -> int:
+    encoding = tiktoken.get_encoding("cl100k_base")
+    try:
+        num_tokens = len(encoding.encode(text, allowed_special={" "}, disallowed_special=(encoding.special_tokens_set - {" ", '<|endoftext|>'})))
+    except Exception as e:
+        print(f"Error encoding text: {e}")
+        num_tokens = 0
+    return num_tokens
 
 
 
@@ -34,6 +42,13 @@ async def process_code_node(graph, node, model_name, api_key):
         if child_summary and child_signature:
             children_summaries.append(f"{child_signature}\n{child_summary}")
     children_summaries_text = "\n".join(children_summaries)
+
+    if count_tokens(code) > 8000:
+        tokens = count_tokens(code)
+        factor = tokens / 8000
+        code = code[ : (int((len(code)//factor)) - 500)]
+        if count_tokens(code) > 8000:
+            return 1, ""
 
     for attempt in range(retries):
         try:
