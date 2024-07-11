@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 import {
     Paperclip,
     ArrowRight,
@@ -32,17 +32,17 @@ const ChatInputField = ({
     sessionId: string
 }) => {
     const [focused, setFocused] = useState(false)
-    // const [paused, setPaused] = useState(false)
     const { formRef, onKeyDown } = useEnterSubmit()
     const inputRef = useRef<HTMLTextAreaElement>(null)
     const [input, setInput] = useState('')
     const [selectedCodeSnippet, setSelectedCodeSnippet] =
         useAtom<ICodeSnippet | null>(selectedCodeSnippetAtom)
     const [codeSnippets, setCodeSnippets] = useAtom(codeSnippetsAtom)
+    const [removedSnippets, setRemovedSnippets] = useState<Set<string>>(
+        new Set()
+    )
     const prevProjectPath = useRef<string>('')
 
-    // For blocking user with modal
-    // const searchParams = useSearchParams()
     const [openProjectModal, setOpenProjectModal] = useState(false)
     const { backendUrl } = useBackendUrl()
 
@@ -60,23 +60,29 @@ const ChatInputField = ({
             setInput('')
             prevProjectPath.current = projectPath
         }
-    }, [projectPath])
+    }, [projectPath, setCodeSnippets])
 
-    function addSnippetToInputField(snippet: ICodeSnippet) {
-        const textarea = inputRef.current
-        if (textarea && typeof textarea.selectionStart === 'number') {
-            const { selectionStart, selectionEnd } = textarea
-            const newInput =
-                input.slice(0, selectionStart) +
-                ` @${snippet.id} ` +
-                input.slice(selectionEnd)
-            setInput(newInput)
-            textarea.focus()
-        }
-    }
+    const addSnippetToInputField = useCallback(
+        (snippet: ICodeSnippet) => {
+            const textarea = inputRef.current
+            if (textarea && typeof textarea.selectionStart === 'number') {
+                const { selectionStart, selectionEnd } = textarea
+                const newInput =
+                    input.slice(0, selectionStart) +
+                    ` @${snippet.id} ` +
+                    input.slice(selectionEnd)
+                setInput(newInput)
+                textarea.focus()
+            }
+        },
+        [input]
+    )
 
     useEffect(() => {
-        if (selectedCodeSnippet) {
+        if (
+            selectedCodeSnippet &&
+            !removedSnippets.has(selectedCodeSnippet.id)
+        ) {
             // Check if it already exists
             const existingSnippet = codeSnippets.find(
                 snippet => snippet.id === selectedCodeSnippet.id
@@ -99,36 +105,30 @@ const ChatInputField = ({
                 }
             }
         }
-    }, [selectedCodeSnippet])
+    }, [selectedCodeSnippet, codeSnippets, input, removedSnippets])
 
-    const handleRemoveSnippet = (id: string) => {
+    const handleRemoveSnippet = useCallback((id: string) => {
         setCodeSnippets(prev => prev.filter(snippet => snippet.id !== id))
-    }
+        setRemovedSnippets(prev => new Set(prev).add(id))
+    }, [])
 
-    async function submitUserMessage(value: string) {
-        sessionActorRef.send({ type: 'session.sendMessage', message: value })
-    }
+    const submitUserMessage = useCallback(
+        async (value: string) => {
+            sessionActorRef.send({
+                type: 'session.sendMessage',
+                message: value,
+            })
+        },
+        [sessionActorRef]
+    )
 
-    // function checkShouldOpenModal() {
-    //     const chatId = searchParams.get('chat')
-    //     // If it's a new chat, open the project modal
-    //     if (chatId && chatId === 'New') {
-    //         setOpenProjectModal(true)
-    //     }
-    // }
-
-    function handleFocus() {
+    const handleFocus = useCallback(() => {
         setFocused(true)
-        // checkShouldOpenModal()
-    }
+    }, [])
 
-    // console.log(sessionActorRef.getSnapshot().value,sessionActorRef.getSnapshot().matches('paused'))
-
-    async function handlePause() {
+    const handlePause = useCallback(async () => {
         sessionActorRef.send({ type: 'session.toggle' })
-    }
-
-    // console.log("loading ", loading)
+    }, [sessionActorRef])
 
     return (
         <div
@@ -149,37 +149,37 @@ const ChatInputField = ({
                     pauseHandler={handlePause}
                 />
             )}
-
             <CodeSnippet
                 snippets={codeSnippets}
                 onClose={handleRemoveSnippet}
-                onClickHeader={addSnippetToInputField}
+                // onClickHeader={addSnippetToInputField}
             />
             {!viewOnly && (
                 <>
                     <form
                         ref={formRef}
-                        onSubmit={async (e: any) => {
-                            e.preventDefault()
+                        onSubmit={useCallback(
+                            async (e: React.FormEvent<HTMLFormElement>) => {
+                                e.preventDefault()
 
-                            // checkShouldOpenModal()
+                                // Blur focus on mobile
+                                if (window.innerWidth < 600) {
+                                    ;(e.target as HTMLFormElement)[
+                                        'message'
+                                    ]?.blur()
+                                }
 
-                            // Blur focus on mobile
-                            if (window.innerWidth < 600) {
-                                e.target['message']?.blur()
-                            }
+                                const value = input.trim()
+                                setInput('')
+                                if (!value) return
 
-                            const value = input.trim()
-                            setInput('')
-                            if (!value) return
+                                await submitUserMessage(value)
 
-                            const res = await submitUserMessage(value)
-
-                            // Let loading message render first
-                            setTimeout(() => {
-                                scrollToBottom()
-                            }, 500)
-                        }}
+                                // Let loading message render first
+                                setTimeout(scrollToBottom, 500)
+                            },
+                            [input, submitUserMessage, scrollToBottom]
+                        )}
                     >
                         <div className="relative">
                             <HighlightKeywordInputField
