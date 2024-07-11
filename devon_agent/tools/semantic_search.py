@@ -63,14 +63,14 @@ class SemanticSearch(Tool):
             semantic_search QUERY_TEXT
 
     DESCRIPTION
-            The semantic_search command performs a semantic search for the specified query within the code base.
-            It uses a vector database to find and return relevant code snippets that match the query contextually.
-            The relavent snippets are sent to a llm, while will then formulate an answer for you.
-            Use this tool to get a better understanding of the codebase before executing a task.
+            The ask_codebase command executes a semantic search within the codebase for the given query. It then sends relevant code snippets to a language model, which generates a comprehensive answer.
+            Utilize this tool to enhance your understanding of the codebase prior to task execution. Pose general inquiries that broaden your comprehension of the codebase, such as "What are...", "How does... function", or "Where does... occur". 
+            Limit your query to a SINGLE QUESTION OR SENTENCE, avoiding conjunctions like "and" or "or". Refrain from using terms such as "files" in your query. 
+            IMPORTANT: Do not accept the provided answer at face value. Always verify the information by examining each file path referenced in the response.
 
     OPTIONS
             QUERY_TEXT
-                    The query text to search within the code base.
+                    The query text to search within the code base. Limit your query to a SINGLE QUESTION AND SENTENCE, avoiding conjunctions like "and" or "or". Refrain from using terms such as "files" or start with "show me" in your query.
 
     RETURN VALUE
             A string containing the final answer from the llm along with the paths to the code snippets
