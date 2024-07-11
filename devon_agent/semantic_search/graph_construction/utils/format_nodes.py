@@ -1,7 +1,8 @@
 import os
 import uuid
+from devon_agent.semantic_search.graph_construction.core.tree_sitter_parser import BaseNode
 
-from llama_index.core.schema import BaseNode
+
 
 
 def format_function_node(

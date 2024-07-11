@@ -1,5 +1,4 @@
-
-from devon_agent.tools.semantic_search.code_graph_manager import CodeGraphManager
+from devon_agent.semantic_search.code_graph_manager import CodeGraphManager
 from devon_agent.tool import Tool, ToolContext
 
 # import chromadb.utils.embedding_functions as embedding_functions

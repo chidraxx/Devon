@@ -5,12 +5,9 @@ import chromadb.utils.embedding_functions as embedding_functions
 import tiktoken
 from dotenv import load_dotenv
 
-from devon_agent.tools.semantic_search.graph_construction.core.graph_builder import \
-    GraphConstructor
-from devon_agent.tools.semantic_search.graph_traversal.encode_codegraph import \
-    generate_doc_level_wise
-from devon_agent.tools.semantic_search.graph_traversal.value_extractor import \
-    extract_chromadb_values
+from devon_agent.semantic_search.graph_construction.core.graph_builder import GraphConstructor
+from devon_agent.semantic_search.graph_traversal.encode_codegraph import generate_doc_level_wise
+from devon_agent.semantic_search.graph_traversal.value_extractor import extract_chromadb_values
 
 # Load environment variables from .env file
 load_dotenv()

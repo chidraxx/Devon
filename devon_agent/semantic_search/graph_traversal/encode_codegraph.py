@@ -1,7 +1,7 @@
 import asyncio
 from collections import deque
 
-from devon_agent.tools.semantic_search.llm import (code_explainer_prompt,
+from devon_agent.semantic_search.llm import (code_explainer_prompt,
                                              get_completion)
 
 

@@ -1,14 +1,10 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
+from devon_agent.semantic_search.graph_construction.utils import format_nodes, tree_parser
+import tree_sitter
+from typing import List, Dict, Tuple
+from devon_agent.semantic_search.graph_construction.core.tree_sitter_parser import CodeHierarchyNodeParser, BaseNode, NodeRelationship, TextNode
 
-import tree_sitter_languages
-from llama_index.core import SimpleDirectoryReader
-from llama_index.core.schema import BaseNode, Document, NodeRelationship
-from llama_index.core.text_splitter import CodeSplitter
-from llama_index.packs.code_hierarchy import CodeHierarchyNodeParser
-
-from devon_agent.semantic_search.graph_construction.utils import (format_nodes,
-                                                                  tree_parser)
 
 
 class BaseParser(ABC):
