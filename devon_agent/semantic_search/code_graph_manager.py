@@ -7,10 +7,9 @@ from devon_agent.semantic_search.graph_traversal.encode_codegraph import (genera
 from devon_agent.semantic_search.graph_traversal.value_extractor import (extract_chromadb_values)
 import chromadb.utils.embedding_functions as embedding_functions
 import os
-from  devon_agent.semantic_search.llm import run_model_completion, get_completion, agent_prompt, agent_prompt_v2, agent_prompt_v3
+from devon_agent.semantic_search.llm import run_model_completion, agent_prompt_v2, model_cost
 from devon_agent.semantic_search.constants import extension_to_language
 import time
-from devon_agent.semantic_search.llm import model_cost
 from devon_agent.semantic_search.graph_construction.core.reranker import rerank_documents
 
 class CodeGraphManager:
@@ -19,7 +18,7 @@ class CodeGraphManager:
             raise ValueError("OpenAI API key is missing.")
         if not api_key:
             raise ValueError("API key is missing.")
-        if model_name not in ["haiku", "groq"]:
+        if model_name not in ["haiku", "groq-8b"]:
             raise ValueError("Unsupported model. Only 'haiku' and 'groq' are supported.")
         
         self.graph_storage_path = graph_storage_path
@@ -122,6 +121,7 @@ class CodeGraphManager:
             self.graph_storage_path,
             not create_new_graph,  # Pass False to create new graph if needed
             ignore_dirs=["__pycache__"]
+
         )
 
         # Build or update the graph and get the actions list
@@ -132,7 +132,10 @@ class CodeGraphManager:
 
 
         # Generate documentation for the updated graph
-        asyncio.run(generate_doc_level_wise(self.graph_constructor.graph, actions, api_key=self.api_key, model_name=self.model_name))
+        batch_size = 50
+        if self.model_name == "groq-8b":
+            batch_size = 5
+        asyncio.run(generate_doc_level_wise(self.graph_constructor.graph, actions, api_key=self.api_key, model_name=self.model_name, batch_size=batch_size))
 
         # Update the collection
         self.update_collection(actions)
@@ -511,8 +514,16 @@ class CodeGraphManager:
             #     result["metadata"]["doc"]=""
             #     print(result["metadata"])
 
+
+            for i in range(len(combined_results)):
+                print(combined_results[i]["metadata"]["file_path"])
+
+            reranked = rerank_documents(query_text, [doc["combined_text"] for doc in combined_results], [metadata["metadata"] for metadata in combined_results], "/Users/arnav/Desktop/codegraph processed/devon/v1")
+
+            print("===================")
+
             # Step 2: Format the response
-            formatted_response = self.format_response_for_llm(combined_results)
+            formatted_response = self.format_response_for_llm(reranked[:10])
 
 
             # async def run_agents():
@@ -568,7 +579,7 @@ class CodeGraphManager:
             return formatted_string
         except Exception as e:
             print(f"An error occurred while formatting the response: {e}")
-        raise
+        raise e
 
 
     def generate_embeddings(self, docs):
@@ -636,6 +647,7 @@ if __name__ == "__main__":
         root_path = "/Users/arnav/Desktop/codegraph processed/devon/v1"
 
         graph_storage_path = os.path.join(root_path, "graph")
+        db_path = os.path.join(root_path, "vectorDB")
         db_path = os.path.join(root_path, "vectorDB")
 
         openai_api_key = os.getenv("OPENAI_API_KEY")
