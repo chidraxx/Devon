@@ -18,7 +18,7 @@ from devon_agent.agents.prompts.openai_prompts import (
 from devon_agent.model import AnthropicModel, ModelArguments, OpenAiModel
 from devon_agent.tools.utils import get_cwd
 from devon_agent.utils.utils import LOGGER_NAME, Hallucination
-from devon_agent.retrieval.file_tree.file_tree_tool import FileTreeTool
+from devon_agent.tools.retrieval.file_tree.file_tree_tool import FileTreeTool
 
 if TYPE_CHECKING:
     from devon_agent.session import Session
