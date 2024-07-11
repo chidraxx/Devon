@@ -1,11 +1,13 @@
-from devon_agent.agents.default.agent import TaskAgent
-from devon_agent.semantic_search.code_graph_manager import CodeGraphManager
+
+from devon_agent.tools.semantic_search.code_graph_manager import CodeGraphManager
 from devon_agent.tool import Tool, ToolContext
-from devon_agent.agents.model import AnthropicModel, ModelArguments, OpenAiModel
+
 # import chromadb.utils.embedding_functions as embedding_functions
 import os
 
-from devon_agent.utils import encode_path, decode_path
+from devon_agent.tools.utils import encode_path
+from devon_agent.config import AgentConfig
+from typing import List
 
 class SemanticSearch(Tool):
     def __init__(self):
@@ -21,20 +23,34 @@ class SemanticSearch(Tool):
         return ["docstring", "manpage"]
 
     def setup(self, ctx):
-        self.db_path = ctx["session"].db_path
-        api_key = os.getenv("ANTHROPIC_API_KEY")
+        self.db_path = ctx["config"].db_path
         self.mapper = os.path.join(self.db_path, "project_mapper.json")
-        self.storage_path = os.path.join(self.db_path, encode_path(ctx["session"].base_path, self.mapper))
+        self.storage_path = os.path.join(self.db_path, encode_path(ctx["config"].path, self.mapper))
         self.vectorDB_path = os.path.join(self.storage_path, "vectorDB")
         self.graph_path = os.path.join(self.storage_path, "graph")
         self.collection_name = "collection"
         print(self.vectorDB_path)
         print("storage_path", self.storage_path)
+
+        
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+        openai_api_key=os.getenv("OPENAI_API_KEY")
+
+
+        configs:List[AgentConfig] = ctx["config"].agent_configs
+        for config in configs:
+            if config.name == "Devon":
+                api_key = config.api_key
+
+            if config.name == "Embedding":
+                openai_api_key = config.api_key
+
+
         self.manager = CodeGraphManager(
             graph_storage_path=self.graph_path, 
             db_path=self.vectorDB_path, 
-            root_path=ctx["session"].base_path, 
-            openai_api_key=os.getenv("OPENAI_API_KEY"), 
+            root_path=ctx["config"].base_path, 
+            openai_api_key=openai_api_key, 
             api_key=api_key, 
             model_name="haiku", 
             collection_name=self.collection_name

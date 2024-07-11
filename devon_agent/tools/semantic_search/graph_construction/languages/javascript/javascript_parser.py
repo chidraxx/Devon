@@ -1,4 +1,4 @@
-from devon_agent.semantic_search.graph_construction.core.base_parser import BaseParser
+from devon_agent.tools.semantic_search.graph_construction.core.base_parser import BaseParser
 
 class JavaScriptParser(BaseParser):
     extensions = [".js", ".jsx"]

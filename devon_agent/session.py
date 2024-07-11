@@ -28,6 +28,7 @@ from devon_agent.tools.utils import get_ignored_files, read_file
 from devon_agent.utils.telemetry import Posthog, SessionStartEvent
 from devon_agent.utils.utils import DotDict, Event
 from devon_agent.versioning.git_versioning import GitVersioning
+from devon_agent.tools.semantic_search import SemanticSearch
 
 
 class Session:
@@ -50,8 +51,7 @@ class Session:
 
         self.environments = config.environments
 
-        self.environments["local"].register_tools(
-            {
+        tools = {
                 "create_file": CreateFileTool().register_post_hook(save_create_file),
                 "open_file": OpenFileTool(),
                 "scroll_up": ScrollUpTool(),
@@ -67,8 +67,17 @@ class Session:
                 "code_search": CodeSearch(),
                 "go_to_definition_or_references": CodeGoTo(),
                 "file_tree_display": FileTreeDisplay(),
+                "ask_codebase": SemanticSearch()
             }
+        
+        if len(self.config.agent_configs) > 1:
+            tools["ask_codebase"] = SemanticSearch()
+
+
+        self.environments["local"].register_tools(
+            tools
         )
+
         self.environments["local"].set_default_tool(ShellTool())
         self.environments["local"].event_log = event_log
         self.environments["user"].event_log = event_log
