@@ -44,7 +44,7 @@ class SemanticSearch(Tool):
     def cleanup(self, ctx):
         try:
             self.manager.delete_collection(self.collection_name)
-        except:
+        except Exception:
             pass
         pass
 
@@ -132,7 +132,6 @@ class SemanticSearch(Tool):
             # response = self.manager.query(query_text)
             # print(response)
             # print(asyncio.run(get_completion(agent_prompt(query_text, (response)), size="large")))
-
 
             # collection = self.vectorDB.get_collection("devon-5", openai_ef)
             # result = collection.query(query_texts=[query_text], n_results=10)
