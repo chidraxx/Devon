@@ -6,12 +6,18 @@ import os
 
 from devon_agent.tools.utils import encode_path
 from devon_agent.config import AgentConfig
-from typing import List
+from typing import List, Any
+from pydantic import Field
 
 class SemanticSearch(Tool):
-    def __init__(self):
-        self.temp_file_path = None
-        self.messages = []  # Class variable to keep track of old messages
+    db_path:str = Field(default=None)
+    mapper:str = Field(default=None)
+    storage_path:str = Field(default=None)
+    vectorDB_path:str = Field(default=None)
+    graph_path:str = Field(default=None)
+    graph_path:str = Field(default=None)
+    collection_name:str = Field(default=None)
+    manager:Any = Field(default=None)
 
     @property
     def name(self):
@@ -22,9 +28,9 @@ class SemanticSearch(Tool):
         return ["docstring", "manpage"]
 
     def setup(self, ctx):
-        self.db_path = ctx["config"].db_path
+        self.db_path = ctx["session"].config.db_path
         self.mapper = os.path.join(self.db_path, "project_mapper.json")
-        self.storage_path = os.path.join(self.db_path, encode_path(ctx["config"].path, self.mapper))
+        self.storage_path = os.path.join(self.db_path, encode_path(ctx["session"].config.path, self.mapper))
         self.vectorDB_path = os.path.join(self.storage_path, "vectorDB")
         self.graph_path = os.path.join(self.storage_path, "graph")
         self.collection_name = "collection"
@@ -36,19 +42,21 @@ class SemanticSearch(Tool):
         openai_api_key=os.getenv("OPENAI_API_KEY")
 
 
-        configs:List[AgentConfig] = ctx["config"].agent_configs
+        configs:List[AgentConfig] = ctx["session"].config.agent_configs
         for config in configs:
-            if config.name == "Devon":
-                api_key = config.api_key
+            if config.agent_name == "Devon":
+                print()
+                # api_key = config.api_key
 
-            if config.name == "Embedding":
-                openai_api_key = config.api_key
+            if config.agent_name == "Embedding":
+                print()
+                # openai_api_key = config.api_key
 
 
         self.manager = CodeGraphManager(
             graph_storage_path=self.graph_path, 
             db_path=self.vectorDB_path, 
-            root_path=ctx["config"].base_path, 
+            root_path=ctx["session"].config.path, 
             openai_api_key=openai_api_key, 
             api_key=api_key, 
             model_name="haiku", 
