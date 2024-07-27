@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Tuple
 from tenacity import RetryError
 
 from devon_agent.agent import Agent
+from devon_agent.agents.conversational_agent import parse_response
 from devon_agent.agents.prompts.anthropic_prompts import (
     anthropic_commands_to_command_docs, anthropic_history_to_bash_history,
     anthropic_last_user_prompt_template_v3,
@@ -16,7 +17,7 @@ from devon_agent.agents.prompts.codegemma_prompts import (
     llama3_7b_system_prompt_template_v1)
 from devon_agent.agents.prompts.llama3_prompts import (
     llama3_commands_to_command_docs, llama3_history_to_bash_history,
-    llama3_last_user_prompt_template_v1, llama3_parse_response,
+    llama3_last_user_prompt_template_v1,
     llama3_system_prompt_template_v1)
 from devon_agent.agents.prompts.openai_prompts import (
     openai_commands_to_command_docs, openai_last_user_prompt_template_v3,
@@ -162,7 +163,7 @@ class TaskAgent(Agent):
                     "state": session.state,
                 }
             ),
-            session.base_path,
+            session.environments["swebench"].base_path,
             self.scratchpad,
         )
 
@@ -196,7 +197,7 @@ class TaskAgent(Agent):
                     "state": session.state,
                 }
             ),
-            session.base_path,
+            session.environments["swebench"].base_path,
             self.scratchpad,
         )
 
@@ -227,7 +228,7 @@ class TaskAgent(Agent):
                     "state": session.state,
                 }
             ),
-            session.base_path,
+            session.environments["swebench"].base_path,
             self.scratchpad,
         )
 
@@ -256,7 +257,7 @@ class TaskAgent(Agent):
                     "state": session.state,
                 }
             ),
-            session.base_path,
+            session.environments["swebench"].base_path,
             self.scratchpad,
         )
 
@@ -314,7 +315,7 @@ class TaskAgent(Agent):
             action = None
 
             try:
-                thought, action, scratchpad = llama3_parse_response(output)
+                thought, action, scratchpad = parse_response(output)
                 if scratchpad:
                     self.scratchpad = scratchpad
             except Exception:
@@ -395,7 +396,7 @@ SCRATCHPAD: {scratchpad}
                 }
             )
             traceback.print_exc()
-            logger.error(f"Exception: {e}")
+            session.logger.error(f"Exception: {e}")
             return (
                 f"Exit due to exception: {e}",
                 "exit_error",

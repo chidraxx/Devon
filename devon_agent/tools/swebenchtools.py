@@ -31,7 +31,21 @@ class SubmitTool(Tool):
         pass
 
     def function(self, ctx: ToolContext):
-        pass
+        
+        return ctx["environment"].execute(f"""
+    cd {ctx["environment"].base_path};
+
+    # Check if the patch file exists and is non-empty
+    if [ -s "/root/test.patch" ]; then
+        # Apply the patch in reverse
+        git apply -R < "/root/test.patch"
+    fi;
+
+    git add -A;
+    git diff --cached > model.patch;
+    echo "<<SUBMISSION||";
+    cat model.patch;
+    echo "||SUBMISSION>>";""")[0]
 
     def cleanup(self, ctx):
         pass

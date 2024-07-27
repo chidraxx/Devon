@@ -352,7 +352,9 @@ class CreateFileTool(Tool):
         """
         command_name: create_file
         description: creates a file in your editor interface and file system
-        signature: create_file file_path <<<content>>>
+        signature: create_file file_path <<<
+            FILE CONTENT
+        >>>
         example: `create_file README.md <<<
         # HEADER 1
         This is a good readme

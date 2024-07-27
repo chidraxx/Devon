@@ -114,7 +114,7 @@ const createLogger = (service: string) => {
     })
 }
 
-const BACKEND_MINIMUM_VERSION = '0.1.21'
+const BACKEND_MINIMUM_VERSION = '0.1.23'
 
 function checkBackendExists(): { passed: boolean; message?: string } {
     try {

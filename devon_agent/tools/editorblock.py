@@ -59,6 +59,7 @@ If you want to put code in a new file, use a *SEARCH/REPLACE block* with:
 
 Ex. 
 
+edit
 mathweb/flask/app.py
 ```python
 <<<<<<< SEARCH
@@ -180,9 +181,9 @@ mathweb/flask/app.py
         return self._format_results(results)
 
     def _extract_edit_content(self, raw_command: str) -> str:
-        # print("checking if found", raw_command)
+        print("checking if found", raw_command)
         if raw_command.strip().startswith("edit"):
-            # print("edit command", raw_command)
+            print("edit command", raw_command.strip()[5:].strip())
             return raw_command.strip()[5:].strip()
         return ""
 

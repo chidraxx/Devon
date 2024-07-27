@@ -125,10 +125,10 @@ def read_with_timeout(container, pid_func, timeout_duration):
                 buffer.decode()
             )
         )
-    # if time.time() >= end_time:
-    #     # raise TimeoutError("Timeout reached while reading from subprocess.\nCurrent buffer: {}\nRunning PIDs: {}".format(buffer.decode(), pids))
-    #     print(traceback.print_exc())
-    #     raise TimeoutError("Timeout reached while reading from subprocess.\nRunning PIDs: {}".format(pids))
+    if time.time() >= end_time:
+        # raise TimeoutError("Timeout reached while reading from subprocess.\nCurrent buffer: {}\nRunning PIDs: {}".format(buffer.decode(), pids))
+        print(traceback.print_exc())
+        raise TimeoutError("Timeout reached while reading from subprocess.\nRunning PIDs: {}".format(pids))
 
     return buffer.decode()
 
@@ -298,16 +298,24 @@ def get_container(
         return _get_non_persistent_container(ctr_name, image_name)
 
 
-@dataclass(frozen=False)
 class SWEEnvEnvironment(EnvironmentModule):
     logger: logging.Logger
     image_name: str
+    tools: Dict[str, "Tool"] = {}
     container_name: Optional[str] = None
     persistent: bool = False
     timeout: Optional[int] = None
     no_mirror: bool = True
     token: str = None
     install_environment: bool = True
+    container: Optional[subprocess.Popen] = None
+    container_obj: Optional[docker.models.containers.Container] = None
+    parent_pids: Optional[set[str]] = None
+    base_path: Optional[str] = None
+    path: Optional[str] = None
+
+    class Config:
+        arbitrary_types_allowed = True
 
     def setup(self, **kwargs):
         if hasattr(self, "container"):
@@ -323,12 +331,14 @@ class SWEEnvEnvironment(EnvironmentModule):
             current_time = str(datetime.datetime.now())
             unique_string = current_time + process_id
             hash_object = hashlib.sha256(unique_string.encode())
-            self.container_name = f"{self.image_name}-{hash_object.hexdigest()[:10]}"
+            self.container_name = f"sweagent-{hash_object.hexdigest()[:10]}"
 
         # this is what creates the actual container
         self.container, self.parent_pids = get_container(
             self.container_name, self.image_name, persistent=self.persistent
         )
+
+        print(self.container_name,self.parent_pids,self.container)
 
         try:
             client = docker.from_env()
@@ -358,6 +368,7 @@ class SWEEnvEnvironment(EnvironmentModule):
             "export PATH=$PATH:/root/commands",
             # error_msg="Failed to add commands directory to PATH",
         )
+
 
     def get_pids(self, all_pids=False) -> list[str]:
         """
@@ -472,18 +483,12 @@ class SWEEnvEnvironment(EnvironmentModule):
             self.logger.info("Agent container stopped")
 
     def register_tools(self, tools: Dict[str, "Tool"]):
-        if "_tools" not in self.__dict__:
-            self._tools = {}
-        if self._tools is None:
-            self._tools = {}
-        self._tools.update(tools)
+        self.tools.update(tools)
 
     def set_default_tool(self, tool: "Tool"):
         self.default_tool = tool
 
-    @property
-    def tools(self) -> Dict[str, "Tool"]:
-        return self._tools
+
 
     def install_env(self, record) -> None:
         """
@@ -612,6 +617,7 @@ class SWEEnvEnvironment(EnvironmentModule):
         print(folders)
         repo_name = record["repo"].replace("/", "__")
         self.base_path = "/" + record["repo"].replace("/", "__")
+        self.path = self.base_path
         print(self.communicate("ls " + self.base_path)[0])
 
         if repo_name not in folders:
