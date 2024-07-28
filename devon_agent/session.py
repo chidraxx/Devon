@@ -27,6 +27,8 @@ from devon_agent.tools.utils import get_ignored_files, read_file
 from devon_agent.utils.config_utils import get_checkpoint_id
 from devon_agent.utils.telemetry import Posthog, SessionStartEvent
 from devon_agent.utils.utils import Event, WholeFileDiff, WholeFileDiffResults
+from devon_agent.tools.semantic_search import SemanticSearch
+from devon_agent.tools.editorblock import EditBlockTool
 from devon_agent.versioning.git_versioning import (
     GitVersioning,
     apply_patch,
@@ -92,10 +94,6 @@ def git_ask_user_for_action(message: str, event_log: List[Dict], event_type: str
         if event_log[-1]["type"] == event_type:
             return event_log[-1]
         time.sleep(1)
-from devon_agent.utils.utils import DotDict, Event
-from devon_agent.versioning.git_versioning import GitVersioning
-from devon_agent.tools.semantic_search import SemanticSearch
-from devon_agent.tools.editorblock import EditBlockTool
 
 
 class Session:

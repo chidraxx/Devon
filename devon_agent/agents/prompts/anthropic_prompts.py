@@ -270,6 +270,8 @@ The user may reference specific snippets or files with @<filename><lineno:lineno
 - Execute ONLY ONE command at a time
 - Wait for feedback after each command
 - Locating classes and functions is more efficient than locating files 
+- 'no_op' command available to allow for more thinking time 
+- If you get an INTERRUPT, ALWAYS use the tool ask_user for clarification to the interrupt
 - 'no_op' command available to allow for more thinking time.
 - USE AskUserTool if you have no specific task and are waiting for one.
 - File tree is NOT RELIABLE. Open files to get context
