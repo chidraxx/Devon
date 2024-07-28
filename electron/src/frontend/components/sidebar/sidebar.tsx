@@ -8,10 +8,11 @@ import {
     SetStateAction,
     Dispatch,
 } from 'react'
-import SidebarHeader from './sidebar-header'
-import SidebarChatLogs from './sidebar-chat-logs'
+// import SidebarHeader from './sidebar-header'
+// import SidebarChatLogs from './sidebar-chat-logs'
 import SidebarItem from './sidebar-item'
 import TimelinePanel from '@/panels/timeline/timeline-panel'
+// import { Icon } from '@iconify/react'
 
 const defaultValue = {
     expanded: true,
@@ -49,12 +50,21 @@ const bottomSidebarItems: any = [
 
 const SidebarContext = createContext(defaultValue)
 
-export default function Sidebar() {
-    const [expanded, setExpanded] = useState(false)
+export default function Sidebar({
+    expanded,
+    setExpanded,
+    showMinimizedTimeline,
+    setShowMinimizedTimeline
+}: {
+    expanded: boolean
+    setExpanded: (expanded: boolean) => void
+    showMinimizedTimeline: boolean
+    setShowMinimizedTimeline: (show: boolean) => void
+}) {
     const [activeTabId, setActiveTabId] = useState(sidebarItems[0].id)
     const contentRef = useRef(null)
     // const showMinimizedTimeline = useRef(false)
-    const [showMinimizedTimeline, setShowMinimizedTimeline] = useState(false)
+    
 
     function handleClick(id: string) {
         if (id === activeTabId) {

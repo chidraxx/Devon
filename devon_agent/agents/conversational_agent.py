@@ -7,10 +7,10 @@ import litellm
 from tenacity import RetryError
 
 from devon_agent.agent import Agent
-from devon_agent.agents.prompts.anthropic_prompts import (
-    anthropic_commands_to_command_docs, anthropic_history_to_bash_history,
-    conversational_agent_last_user_prompt_template_v3,
-    conversational_agent_system_prompt_template_v3)
+from devon_agent.agents.prompts.anthropic_prompts import (anthropic_commands_to_command_docs,
+    anthropic_history_to_bash_history, conversational_agent_last_user_prompt_template_v3,
+    conversational_agent_system_prompt_template_v3, swe_bench_anthropic_system_prompt_template_v3,
+    swe_bench_anthropic_user_prompt_template_v3)
 from devon_agent.agents.prompts.openai_prompts import (
     openai_commands_to_command_docs,
     openai_conversation_agent_last_user_prompt_template,
@@ -20,6 +20,8 @@ from devon_agent.tools import parse_command
 from devon_agent.tools.utils import get_cwd
 from devon_agent.utils.config_utils import make_checkpoint
 from devon_agent.utils.utils import LOGGER_NAME, Hallucination
+from devon_agent.tools.retrieval.file_tree.file_tree_tool import FileTreeTool
+# from devon_agent.session import Session
 
 if TYPE_CHECKING:
     from devon_agent.session import Session
@@ -48,11 +50,15 @@ class ConversationalAgent(Agent):
 
     default_models = {
         "gpt4-o": OpenAiModel,
+        "gpt-4o-mini": OpenAiModel,
         "claude-3-5-sonnet": AnthropicModel,
     }
 
     default_model_configs = {
         "gpt4-o": {
+            "prompt_type": "openai",
+        },
+        "gpt-4o-mini": {
             "prompt_type": "openai",
         },
         "claude-3-5-sonnet": {
@@ -102,8 +108,18 @@ class ConversationalAgent(Agent):
         return "\n".join(
             [self._format_editor_entry(k, v, PAGE_SIZE) for k, v in editor.items()]
         )
+    
+    def _prepare_file_tree(self, base_path):
+        # result_list, result_tree= FileTreeTool(root_dir=base_path).get_large_tree(base_path, 500, 20)
 
-    def _prepare_anthropic(self, task, editor, session, scratchpad=None):
+        return f"""
+<FileTree>
+The following is the file tree of the codebase
+{'result_tree'}
+</FileTree>
+"""
+    
+    def _prepare_anthropic(self, task, editor, session, scratchpad = None):
         command_docs = (
             "Custom Commands Documentation:\n"
             + anthropic_commands_to_command_docs(
@@ -113,8 +129,10 @@ class ConversationalAgent(Agent):
         )
 
         history = anthropic_history_to_bash_history(self.agent_config.chat_history)
-        system_prompt = conversational_agent_system_prompt_template_v3(command_docs)
-        last_user_prompt = conversational_agent_last_user_prompt_template_v3(
+        print("history", history)
+        # history_with_file_tree = self._prepare_file_tree(session.config.path) + history
+        system_prompt = swe_bench_anthropic_system_prompt_template_v3(command_docs)
+        last_user_prompt = swe_bench_anthropic_user_prompt_template_v3(
             history,
             editor,
             get_cwd(
@@ -174,7 +192,7 @@ class ConversationalAgent(Agent):
         self.current_model = self._initialize_model()
 
         if self.interrupt:
-            observation = observation + ". also " + self.interrupt
+            observation = observation + ". also " + "YOU HAVE BEEN **INTERRUPTED**. You got the following message :   " + self.interrupt + "   : **INTERRUPTED**"
             self.interrupt = ""
 
         try:

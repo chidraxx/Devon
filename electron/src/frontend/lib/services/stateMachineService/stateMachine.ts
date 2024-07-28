@@ -22,7 +22,7 @@ import {
     assign,
     fromPromise,
     emit,
-    log
+    log,
     // createActor
 } from 'xstate'
 import type { Message } from '@/lib/types'
@@ -47,7 +47,12 @@ type ServerEvent = {
         | 'GitEvent'
         | 'GitError'
         | 'GitResolve'
+        | 'GitInit'
         | 'Checkpoint'
+        | 'GitAskUser'
+        | 'GitCorrupted'
+        | 'GitCorruptedResolved'
+        | 'GitMergeResult'
     content: any
     identifier: string | null
 }
@@ -69,11 +74,19 @@ type ServerEventContext = {
         }[]
     }
     gitError: string | null
+    gitInit: string | null
+    gitMessage: string | null
+    gitCorrupted: boolean
+    gitMergeResult: {
+        success: boolean
+        message: string
+    } | null
+    status: string | null //'idle' | 'thinking' | 'executing' | 'waiting_for_user'
 }
 
 export const eventHandlingLogic = fromTransition(
     (state: ServerEventContext, event: ServerEvent) => {
-        console.log('event', event)
+        // console.log('event', event)
         switch (event.type) {
             case 'session.reset': {
                 return {
@@ -87,18 +100,22 @@ export const eventHandlingLogic = fromTransition(
                         base_commit: null,
                         commits: [],
                     },
+                    gitMessage: null,
+                    gitCorrupted: false,
+                    gitMergeResult: null,
                 }
             }
             case 'Stop': {
                 return { ...state, ended: true }
             }
             case 'ModelRequest': {
-                return { ...state, modelLoading: true }
+                return { ...state, modelLoading: true, status: 'thinking' }
             }
             case 'ModelResponse': {
                 const content = JSON.parse(event.content)
                 return {
                     ...state,
+                    status: 'idle',
                     modelLoading: false,
                     messages: [
                         ...state.messages,
@@ -133,14 +150,16 @@ export const eventHandlingLogic = fromTransition(
             case 'ToolRequest': {
                 return {
                     ...state,
+                    status: 'executing',
+                    toolLoading: true,
                     toolMessage:
                         'Running command: ' + event.content.raw_command.trim(),
                 }
             }
             case 'Checkpoint': {
-
                 return {
                     ...state,
+                    status: 'idle',
                     messages: [
                         ...state.messages,
                         { text: event.content, type: 'checkpoint' } as Message,
@@ -152,6 +171,7 @@ export const eventHandlingLogic = fromTransition(
                     state.toolMessage + '|START_RESPONSE|' + event.content
                 return {
                     ...state,
+                    toolLoading: false,
                     toolMessage: '',
                     messages: [
                         ...state.messages,
@@ -180,6 +200,7 @@ export const eventHandlingLogic = fromTransition(
             case 'UserRequest': {
                 return {
                     ...state,
+                    status: 'waiting_for_user',
                     userRequest: true,
                     messages: [
                         ...state.messages,
@@ -266,9 +287,44 @@ export const eventHandlingLogic = fromTransition(
                 return {
                     ...state,
                     gitError: null,
+                    gitMessage: null,
                 }
             }
-
+            case 'GitAskUser':
+                return {
+                    ...state,
+                    gitMessage: event.content ?? null,
+                }
+            case 'GitInit': {
+                return {
+                    ...state,
+                    gitInit: event.content ?? null,
+                }
+            }
+            case 'GitCorrupted': {
+                return {
+                    ...state,
+                    gitCorrupted: true,
+                }
+            }
+            case 'GitCorruptedResolved': {
+                return {
+                    ...state,
+                    gitCorrupted: false,
+                }
+            }
+            case 'GitMergeResult': {
+                return {
+                    ...state,
+                    gitMergeResult: event.content,
+                }
+            }
+            case 'GitMergeResolve': {
+                return {
+                    ...state,
+                    gitMergeResult: null,
+                }
+            }
             default: {
                 return state
             }
@@ -285,6 +341,11 @@ export const eventHandlingLogic = fromTransition(
             commits: [],
         },
         gitError: null,
+        gitInit: null,
+        gitMessage: null,
+        gitMergeResult: null,
+        gitCorrupted: false,
+        status: 'idle',
     }
 )
 
@@ -368,7 +429,7 @@ const createSessionActor = fromPromise(
                 `${input.host}/sessions/${input?.name}`,
                 {
                     versioning_type,
-                    ...input.agentConfig
+                    ...input.agentConfig,
                 },
                 {
                     params: {
@@ -440,7 +501,9 @@ const revertSessionActor = fromPromise(
         input: { host: string; name: string; checkpoint_id: number }
     }) => {
         console.log('reverting', input.checkpoint_id)
-        const response = await axios.patch(`${input?.host}/sessions/${input?.name}/revert?checkpoint_id=${input.checkpoint_id}`)
+        const response = await axios.patch(
+            `${input?.host}/sessions/${input?.name}/revert?checkpoint_id=${input.checkpoint_id}`
+        )
         return response
     }
 )
@@ -593,7 +656,9 @@ export const newSessionMachine = setup({
         revertSession: revertSessionActor,
         resumeSession: fromPromise(
             async ({ input }: { input: { host: string; name: string } }) => {
-                const response = await axios.patch(`${input?.host}/sessions/${input?.name}/resume`)
+                const response = await axios.patch(
+                    `${input?.host}/sessions/${input?.name}/resume`
+                )
                 return response
             }
         ),
@@ -616,6 +681,11 @@ export const newSessionMachine = setup({
                 base_commit: null,
                 commits: [],
             },
+            gitMergeResult: null,
+            gitMessage: null,
+            gitError: null,
+            gitInit: null,
+            gitCorrupted: false,
         },
         healthcheckRetry: 0,
     }),

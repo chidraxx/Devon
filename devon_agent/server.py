@@ -5,6 +5,7 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from time import sleep
+import time
 from typing import Any, Dict, List, Optional
 
 import fastapi
@@ -21,6 +22,9 @@ from devon_agent.environments.user_environment import UserEnvironment
 from devon_agent.session import Session
 from devon_agent.utils.config_utils import hydrate_config
 from devon_agent.utils.utils import LOGGER_NAME, WholeFileDiffResults
+from devon_agent.semantic_search.code_graph_manager import CodeGraphManager
+from devon_agent.tools.utils import encode_path, load_mapper, update_mapper
+from fastapi import FastAPI, BackgroundTasks, HTTPException
 
 # from devon_agent.semantic_search.code_graph_manager import CodeGraphManager
 
@@ -141,65 +145,113 @@ session_buffers: Dict[str, str] = {}
 def read_root():
     return {"content": "Hello from Devon!"}
 
+@app.get("/indexes")
+def get_indexes():
+    try:
+        mapper_path = os.path.join(app.db_path, "project_mapper.json")
+        mapper = load_mapper(mapper_path)
 
-# @app.get("/indexes")
-# def get_indexes():
-#     client = chromadb.PersistentClient(path=os.path.join(app.db_path, "vectorDB"))
+        index_info = [
+            {"path": original_path, "encoded": data["hash"], "last_updated_at": data["last_updated_at"]}
+            for original_path, data in mapper.items()
+        ]
 
-#     # Get completed indexes from ChromaDB
-#     completed_indexes = [
-#         decode_path(collection.name)
-#         for collection in client.list_collections()
-#     ]
+        return index_info
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get indexes: {str(e)}")
 
-#     # Decode the keys from index_tasks
-#     in_progress_indexes = [unquote(key).replace("%2F", "/") for key in index_tasks.keys()]
+class IndexCreationRequest(BaseModel):
+    index: str
+    model_api: str
+    embedding_api: str
 
-#     # Combine completed indexes with in-progress indexes
-#     all_indexes = set(completed_indexes + in_progress_indexes)
+index_tasks: Dict[str, Dict[str, Any]] = {}
 
-#     # Create a list of dictionaries with index information
-#     index_info = []
-#     for index in all_indexes:
-#         # For in-progress tasks, we need to re-encode the path to check in index_tasks
-#         encoded_index = index.replace("/", "%2F")
-#         status = index_tasks.get(encoded_index, "done")  # If not in index_tasks, it's completed
-#         index_info.append({
-#             "path": index,
-#             "status": status
-#         })
+@app.post("/indexes")
+def create_index(request: IndexCreationRequest, background_tasks: BackgroundTasks):
+    try:
+        def register_task(task, **kwargs):
+            index_tasks[request.index] = {"status": "running", "percentage": "0"}
+            
+            def progress_tracker(progress: float):
+                print(progress)
+                if request.index not in index_tasks:
+                    index_tasks[request.index] = {}
+                if progress >= 1:
+                    index_tasks[request.index]["percentage"] = 95
+                else:
+                    index_tasks[request.index]["percentage"] = int(progress * 95)
 
-#     return index_info
+            task(progress_tracker=progress_tracker, **kwargs)
+            
+            # Update the last_updated_at after the task is complete
+            mapper_path = os.path.join(app.db_path, "project_mapper.json")
+            update_info = {"last_updated_at": time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())}
+            update_mapper(request.index, mapper_path, update=update_info)
+            print("task complete")
+            index_tasks[request.index] = {"status": "done", "percentage": "100"}
 
-# index_tasks = {}
+        mapper_path = os.path.join(app.db_path, "project_mapper.json")
+        encoded_index = encode_path(request.index, mapper_path)
+        storage_path = os.path.join(app.db_path, encoded_index)
+        vectorDB_path = os.path.join(storage_path, "vectorDB")
+        graph_path = os.path.join(storage_path, "graph")
+        collection_name = "collection"
+        
+        api_key = request.model_api
+        openai_api_key = request.embedding_api
 
-# @app.post("/indexes/{index}")
-# def create_index(index: str,background_tasks: fastapi.BackgroundTasks):
+        manager = CodeGraphManager(
+            graph_storage_path=graph_path, 
+            db_path=vectorDB_path, 
+            root_path=request.index, 
+            openai_api_key=openai_api_key, 
+            api_key=api_key, 
+            model_name="haiku", 
+            collection_name=collection_name
+        )
+        
+        background_tasks.add_task(register_task, manager.create_graph)
 
-#     def register_task(task,**kwargs):
-#         index_tasks[index] = "running"
-#         task(**kwargs)
-#         print("task complete")
-#         index_tasks[index] = "done"
+        return {"message": "Index creation task started"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create index: {str(e)}")
 
-#     vectorDB_path = os.path.join(app.db_path, "vectorDB")
-#     graph_path = os.path.join(app.db_path, "graph/graph.pickle")
-#     collection_name = encode_path(index.replace("%2F", "/"))
-#     print(collection_name)
-#     manager = CodeGraphManager(graph_path, vectorDB_path, collection_name,os.environ.get("OPENAI_API_KEY"),index.replace("%2F", "/"))
-#     background_tasks.add_task(register_task,manager.create_graph)
-
-# @app.get("/indexes/{index}/status")
-# def get_index_status(index: str,background_tasks: fastapi.BackgroundTasks):
-#     print(index_tasks,index, index in index_tasks, list(index_tasks.keys())[0])
-#     if index not in index_tasks:
-#         print("pending")
-#         return "pending"
-#     else:
-#         print(index_tasks[index])
-#         return index_tasks[index]
+@app.get("/indexes/{index}/status")
+def get_index_status(index: str):
+    """Retrieve the status of a specific index."""
+    try:
+        if index not in index_tasks:
+            return {"status": "no task"}
+        else:
+            return index_tasks[index]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get index status: {str(e)}")
 
 
+@app.get("/estimate_cost")
+def estimate_cost(path: str):
+    """Estimate the cost using the CodeGraphManager for the given path."""
+    try:
+        mapper_path = os.path.join(app.db_path, "project_mapper.json")
+        encoded_index = encode_path(path, mapper_path)
+        storage_path = os.path.join(app.db_path, encoded_index)
+        vectorDB_path = os.path.join(storage_path, "vectorDB")
+        graph_path = os.path.join(storage_path, "graph")
+        
+        manager = CodeGraphManager(
+            graph_storage_path=graph_path, 
+            db_path=vectorDB_path, 
+            root_path=path, 
+            openai_api_key=None, 
+            api_key=None, 
+            model_name="haiku", 
+            collection_name=None
+        )
+        cost = manager.estimate_cost()
+        return {"path": path, "estimated_cost": cost}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 # @app.delete("/indexes/{index}")
 # def delete_index(index: str):
 #     vectorDB_path = os.path.join(app.db_path, "vectorDB")
@@ -287,7 +339,7 @@ def create_session(
 
     sessions[session].init_state()
     sessions[session].setup()
-    background_tasks.add_task(sessions[session].run_event_loop)
+    background_tasks.add_task(sessions[session].run_event_loop,action="new")
     running_sessions.append(session)
 
     return session
@@ -313,9 +365,17 @@ def delete_session(session: str):
         raise fastapi.HTTPException(status_code=404, detail="Session not found")
 
     sessions[session].delete_from_db()
-    del sessions[session]
+
+
+
+
     if session in running_sessions:
+        if session in blocked_sessions:
+            session_buffers[session] = "delete"
+        sessions[session].terminate()
         running_sessions.remove(session)
+
+    del sessions[session]
 
     return session
 
@@ -333,7 +393,7 @@ def start_session(
     session_obj.config.agent_configs[0].api_key = api_key
     if session not in running_sessions:
         session_obj.setup()
-        background_tasks.add_task(sessions[session].run_event_loop)
+        background_tasks.add_task(sessions[session].run_event_loop,action="load")
         running_sessions.append(session)
 
     if not session_obj:
@@ -354,7 +414,7 @@ def resume_session(session: str):
 
 @app.patch("/sessions/{session}/revert")
 def revert_session(
-    session: str, checkpoint_id: int, background_tasks: fastapi.BackgroundTasks
+    session: str, checkpoint_id: str, background_tasks: fastapi.BackgroundTasks
 ):
     if session not in sessions:
         raise fastapi.HTTPException(status_code=404, detail="Session not found")
@@ -364,7 +424,7 @@ def revert_session(
     sessions[session].terminate()
     sessions[session].revert(checkpoint_id)
     sessions[session].pause()
-    background_tasks.add_task(sessions[session].run_event_loop, revert=True)
+    background_tasks.add_task(sessions[session].run_event_loop, revert=True,action="revert")
     return session
 
 
@@ -396,18 +456,26 @@ def terminate(session: str):
 
 @app.patch("/sessions/{session}/reset")
 def reset_session(session: str, background_tasks: fastapi.BackgroundTasks):
+    print("resetting session1",flush=True)
     if session not in sessions:
         raise fastapi.HTTPException(status_code=404, detail="Session not found")
 
     if not (session_obj := sessions.get(session)):
         raise fastapi.HTTPException(status_code=404, detail="Session not found")
+    print("resetting session2",flush=True)
     session_buffers[session] = "terminate"
+    print("resetting session3",flush=True)
     session_obj.terminate()
+    print("resetting session4",flush=True)
     session_obj.init_state([])
+    print("resetting session5",flush=True)
     session_obj.setup()
+    print("resetting session6",flush=True)
     if session in session_buffers:
         del session_buffers[session]
-    background_tasks.add_task(session_obj.run_event_loop)
+    print("resetting session7",flush=True)
+    background_tasks.add_task(session_obj.run_event_loop,action="reset")
+    print("resetting session8",flush=True)
 
     return session
 
@@ -462,7 +530,7 @@ def create_response(session: str, response: str):
 
 @app.get("/sessions/{session}/diff")
 def get_checkpoint_diff(
-    session: str, src_checkpoint_id: int, dest_checkpoint_id: int
+    session: str, src_checkpoint_id: str, dest_checkpoint_id: str
 ) -> WholeFileDiffResults:
     if session not in sessions:
         raise fastapi.HTTPException(status_code=404, detail="Session not found")
@@ -482,12 +550,20 @@ def create_event(session: str, event: ServerEvent):
     if session not in sessions:
         raise fastapi.HTTPException(status_code=404, detail="Session not found")
     print(event)
+
     if event.type == "GitMerge":
-        sessions[session].merge(event.content["commit_message"])
+        merged,message = sessions[session].merge(event.content["commit_message"])
+        sessions[session].event_log.append({
+            "type":"GitMergeResult",
+            "content":{
+                "success":merged,
+                "message":message
+            },
+            "producer":event.producer,
+            "consumer":event.consumer
+        })
         return event
-    if event.type == "GitEvent":
-        if event.content["type"] == "revert":
-            session_buffers[session] = "ignore"
+    
     sessions[session].event_log.append(event.model_dump())
     return event
 

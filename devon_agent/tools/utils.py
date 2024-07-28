@@ -4,9 +4,60 @@ import json
 import os
 import tempfile
 from pathlib import Path
-
+import hashlib
 from devon_agent.tool import ToolContext
+from typing import Dict, Any
+import base64
 
+
+def encode_path(path: str, mapper_path: str) -> str:
+    """Encode a path using SHA-256 and store the mapping along with metadata in a JSON file."""
+    hashed = hashlib.sha256(path.encode()).hexdigest()
+    
+    if not os.path.exists(mapper_path):
+        with open(mapper_path, 'w') as f:
+            json.dump({}, f)
+    
+    with open(mapper_path, 'r+') as f:
+        mapper = json.load(f)
+        if path not in mapper:
+            mapper[path] = {
+                "hash": hashed,
+                "last_updated_at": None  # Set to None initially
+            }
+        f.seek(0)
+        json.dump(mapper, f, indent=4)
+    
+    return hashed
+
+def update_mapper(path: str, mapper_path: str, update: Dict[str, Any]) -> None:
+    """Update the mapping metadata in the JSON file."""
+    if os.path.exists(mapper_path):
+        with open(mapper_path, 'r+') as f:
+            mapper = json.load(f)
+            if path in mapper:
+                mapper[path].update(update)
+                f.seek(0)
+                json.dump(mapper, f, indent=4)
+
+def load_mapper(mapper_path: str) -> Dict[str, Dict[str, Any]]:
+    """Load the path to hash mapping with metadata from a JSON file."""
+    if os.path.exists(mapper_path):
+        with open(mapper_path, 'r') as f:
+            return json.load(f)
+    return {}
+
+def decode_path(encoded_path, mapper_path):
+    """Find the original path based on the encoded value."""
+    try:
+        with open(mapper_path, 'r') as f:
+            mapper = json.load(f)
+        for original_path, data in mapper.items():
+            if encoded_path.endswith(data['hash']):
+                return original_path
+    except:
+        return None
+    return None
 
 def get_ignored_files(gitignore_path):
     ignored_files = []
@@ -109,6 +160,47 @@ Match found on line: {index}
 """
 
 
+def write_file_tool(ctx, file_path: str, content: str) -> str:
+    """
+    Writes the given content to the given file path in the docker container.
+    Creates the file if it doesn't exist.
+    
+    Args:
+        ctx: The context object containing the environment and state.
+        file_path (str): The path of the file to write.
+        content (str): The content to write.
+    
+    Returns:
+        str: A message indicating success or failure.
+    """
+    try:
+        abs_path = make_abs_path(ctx, file_path)
+
+        # Create directory if it doesn't exist
+        dir_path = os.path.dirname(abs_path)
+        ctx["environment"].execute(f"mkdir -p {dir_path}")
+
+        # Escape single quotes in the content
+        escaped_content = content.replace("'", "'\\''")
+
+        # Write the content to the file
+        create_command = f"cat << 'DELIM' > {abs_path}\n{escaped_content}\nDELIM"
+        result = ctx["environment"].execute(create_command)
+
+        if result[1] == 1:
+            raise Exception(result[0])
+
+        msg = f"Successfully wrote to file {abs_path}"
+        ctx["config"].logger.info(msg)
+
+        return msg
+
+    except Exception as e:
+        ctx["config"].logger.error(f"Failed to write to file: {abs_path}. Error: {str(e)}")
+        raise Exception(f"Failed to write to file: {abs_path}. Error: {str(e)}")
+
+
+
 def write_file(ctx, file_path: str, content: str = "") -> str:
     """
     Writes the given content to the given file path.
@@ -144,6 +236,73 @@ def write_file(ctx, file_path: str, content: str = "") -> str:
             f"Failed to write to file: {abs_path}. Error: {str(e)}"
         )
         raise Exception(f"Failed to write to file: {abs_path}. Error: {str(e)}")
+
+    
+
+def read_binary_file(ctx, file_path: str) -> bytes:
+    """
+    Reads the content of a binary file from the docker container.
+    
+    Args:
+        ctx: The context object containing the environment.
+        file_path (str): The path of the file within the system to read.
+    
+    Returns:
+        bytes: The binary content of the file.
+    """
+    try:
+        # Use base64 to safely transfer binary data
+        result, _ = ctx["environment"].execute(f"base64 '{file_path}'")
+        base64_content = result.strip()
+        
+        # Decode the base64 content to get the original binary data
+        binary_content = base64.b64decode(base64_content)
+        
+        return binary_content
+    except Exception as e:
+        ctx["config"].logger.error(f"Failed to read binary file: {file_path}. Error: {str(e)}")
+        raise 
+
+def write_binary_file(ctx, file_path: str, content: bytes) -> str:
+    """
+    Writes the given binary content to the given file path in the docker container.
+    Creates the file if it doesn't exist.
+    
+    Args:
+        ctx: The context object containing the environment and state.
+        file_path (str): The path of the file to write.
+        content (bytes): The binary content to write.
+    
+    Returns:
+        str: A message indicating success or failure.
+    """
+    try:
+        abs_path = make_abs_path(ctx, file_path)
+
+        # Create directory if it doesn't exist
+        dir_path = os.path.dirname(abs_path)
+        ctx["environment"].execute(f"mkdir -p {dir_path}")
+
+        # Encode the binary content to base64
+        base64_content = base64.b64encode(content).decode('utf-8')
+
+        # Write the base64 content to the file and then decode it
+        create_command = f"echo '{base64_content}' | base64 -d > {abs_path}"
+        result = ctx["environment"].execute(create_command)
+
+        if result[1] == 1:
+            raise Exception(result[0])
+
+        msg = f"Successfully wrote binary data to file {abs_path}"
+        ctx["config"].logger.info(msg)
+
+        return msg
+
+    except Exception as e:
+        ctx["config"].logger.error(f"Failed to write binary file: {abs_path}. Error: {str(e)}")
+        raise Exception(f"Failed to write binary file: {abs_path}. Error: {str(e)}")
+
+
 
 
 def check_lint(ctx, code_string: str, file_path: str):

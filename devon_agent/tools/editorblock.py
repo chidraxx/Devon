@@ -168,11 +168,13 @@ mathweb/flask/app.py
 """
 
     def function(self, context: ToolContext, *args, **kwargs):
-        # print("raw_command", context.get("raw_command", ""))
+        print("raw_command", context.get("raw_command", ""))
         raw_command = context.get("raw_command", "")
         edit_content = self._extract_edit_content(raw_command)
         if not edit_content:
             return "Error: No edit content provided"
+        if edit_content.strip() == "":
+            return "Error: No edit content provided" 
         # print("edit_content", edit_content)
         edits = list(self.find_original_update_blocks(edit_content))
         results = self.apply_edits(context, edits)

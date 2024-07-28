@@ -14,7 +14,6 @@ import { CircleHelp, Settings, Info } from 'lucide-react'
 import SafeStoragePopoverContent from '@/components/modals/safe-storage-popover-content'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Model, AgentConfig, UpdateConfig } from '@/lib/types'
-import { models } from '@/lib/config'
 import {
     Dialog,
     DialogTrigger,
@@ -29,17 +28,9 @@ import FolderPicker from '@/components/ui/folder-picker'
 import * as VisuallyHidden from '@radix-ui/react-visually-hidden'
 import axios from 'axios'
 import { updateSessionConfig } from '@/lib/services/sessionService/sessionService'
-
-type ExtendedComboboxItem = Model & ComboboxItem & { company: string }
-
-const comboboxItems: ExtendedComboboxItem[] = models
-    .filter(model => !model.comingSoon)
-    .map(model => ({
-        ...model,
-        value: model.id,
-        label: model.name,
-        company: model.company,
-    }))
+import { savedFolderPathAtom } from '@/lib/utils'
+import { useAtom } from 'jotai'
+import { useModels, addModel, removeModel } from '@/lib/models'
 
 const SettingsModal = ({
     trigger,
@@ -65,15 +56,29 @@ const SettingsModal = ({
                     </DialogHeader>
                     <DialogDescription></DialogDescription>
                 </VisuallyHidden.Root>
-                <General setOpen={setOpen} />
+                <General setOpen={setOpen} open={open} />
             </DialogContent>
         </Dialog>
     )
 }
 
-const General = ({ setOpen }: { setOpen: (val: boolean) => void }) => {
+const General = ({
+    setOpen,
+    open,
+}: {
+    setOpen: (val: boolean) => void
+    open: boolean
+}) => {
     const { toast } = useToast()
-    const [selectedModel, setSelectedModel] = useState(comboboxItems[0])
+    const {
+        models,
+        comboboxItems,
+        selectedModel,
+        setSelectedModel,
+        refetchModels,
+        backupModel,
+    } = useModels()
+
     // Checking model
     const {
         checkHasEncryptedData,
@@ -90,7 +95,7 @@ const General = ({ setOpen }: { setOpen: (val: boolean) => void }) => {
     const name = SessionMachineContext.useSelector(state => state.context.name)
 
     const [originalModelName, setOriginalModelName] = useState(
-        comboboxItems[0].id
+        selectedModel?.id
     )
     const [modelHasSavedApiKey, setModelHasSavedApiKey] = useState(false)
     const [folderPath, setFolderPath] = useState('')
@@ -102,7 +107,8 @@ const General = ({ setOpen }: { setOpen: (val: boolean) => void }) => {
         value: null,
     })
     const [hasClickedQuestion, setHasClickedQuestion] = useState(false)
-
+    const [_, setSavedFolderPath] = useAtom(savedFolderPathAtom)
+    const { removeApiKey } = useSafeStorage()
     const clearStorageAndResetSession = () => {
         deleteData()
         toast({ title: 'Storage cleared!' })
@@ -136,7 +142,6 @@ const General = ({ setOpen }: { setOpen: (val: boolean) => void }) => {
                             ...foundModel,
                             value: foundModel.id,
                             label: foundModel.name,
-                            company: foundModel.company,
                         }
                         setSelectedModel(extendedComboboxModel)
                         setOriginalModelName(modelName)
@@ -145,15 +150,18 @@ const General = ({ setOpen }: { setOpen: (val: boolean) => void }) => {
             }
         }
         check()
-    }, [])
+    }, [open, models?.length])
 
     const fetchApiKey = useCallback(async () => {
+        if (!selectedModel) return
         const res = await getApiKey(selectedModel.id)
         return res
-    }, [selectedModel.id])
+    }, [selectedModel?.id])
 
     async function handleUseNewModel() {
+        if (!selectedModel) return
         await setUseModelName(selectedModel.id, false)
+        refetchModels(true)
         setOpen(false)
         const _key: string = await fetchApiKey()
         const config: UpdateConfig = {
@@ -164,12 +172,18 @@ const General = ({ setOpen }: { setOpen: (val: boolean) => void }) => {
     }
 
     function handleChangePath() {
-        sessionActorref.send({ type: 'session.delete' })
+        if (folderPath === initialFolderPath.value) {
+            sessionActorref.send({ type: 'session.reset' })
+        } else {
+            setSavedFolderPath(folderPath)
+            sessionActorref.send({ type: 'session.delete' })
+        }
         setOpen(false)
     }
 
     // use this when we implement the change directory button
     function handleNewChat() {
+        if (!selectedModel) return
         async function updateMachine() {
             sessionActorref.send({
                 type: 'session.create',
@@ -200,77 +214,135 @@ const General = ({ setOpen }: { setOpen: (val: boolean) => void }) => {
         setOpen(false)
     }
 
+    async function handleDeleteCurrentCustomModel() {
+        if (!selectedModel) return
+        
+        removeModel(selectedModel)
+        removeApiKey(selectedModel.id, false)
+        if (originalModelName === selectedModel.id) {
+            setSelectedModel(null)
+            await setUseModelName(backupModel.id, false)
+        }
+        setOpen(false)
+    }
+
     return (
         <div className="pt-4 pb-2 px-2 flex flex-col gap-5">
             <GeneralSettingsCard
                 folderPath={folderPath}
                 setFolderPath={setFolderPath}
                 handleChangePath={handleChangePath}
+                initialFolderPath={initialFolderPath}
+                handleNewChat={handleNewChat}
             />
             <Card className="bg-midnight">
                 <CardContent>
                     <div className="flex flex-col mt-5 w-full mb-4">
                         <div className="flex items-center justify-between">
                             <p className="text-lg font-semibold">
-                                {selectedModel.id !== originalModelName
+                                {selectedModel?.id === 'custom'
+                                    ? 'Add a custom model:'
+                                    : selectedModel?.id !== originalModelName
                                     ? `Set new model: `
                                     : `Current model:`}
                             </p>
                             <div className="flex flex-col">
-                                <Combobox
-                                    items={comboboxItems}
-                                    itemType="model"
-                                    selectedItem={selectedModel}
-                                    setSelectedItem={setSelectedModel}
-                                />
+                                {selectedModel && (
+                                    <Combobox
+                                        items={comboboxItems}
+                                        itemType="model"
+                                        selectedItem={selectedModel}
+                                        setSelectedItem={setSelectedModel}
+                                    />
+                                )}
                             </div>
                         </div>
-                        {selectedModel.value !== 'claude-3-5-sonnet' && (
-                            <span className="text-sm text-green-500 mt-2 flex gap-1 items-center">
-                                <Info className="w-4 h-4" />
-                                Note: For best results use Claude 3.5 Sonnet
-                                (it's better at coding!)
-                            </span>
-                        )}
-                    </div>
-                    <div className="flex justify-between w-full">
-                        <div className="flex gap-1 items-center mb-4 w-full">
-                            <p className="text-xl font-bold">
-                                {`${selectedModel.company} API Key`}
-                            </p>
-                            <Popover>
-                                <PopoverTrigger
-                                    className="ml-[2px]"
-                                    onClick={() => setHasClickedQuestion(true)}
-                                >
-                                    <CircleHelp size={14} />
-                                </PopoverTrigger>
-                                <SafeStoragePopoverContent />
-                            </Popover>
-                            {hasClickedQuestion && (
-                                <a
-                                    className="text-primary hover:underline self-end ml-auto cursor-pointer"
-                                    href={selectedModel?.apiKeyUrl}
-                                    target="_blank"
-                                >
-                                    Looking for an API key?
-                                </a>
+                        {selectedModel?.value !== 'claude-3-5-sonnet' &&
+                            selectedModel?.id !== 'custom' && (
+                                <span className="text-sm text-green-500 mt-2 flex gap-1 items-center">
+                                    <Info className="w-4 h-4" />
+                                    Note: For best results use Claude 3.5 Sonnet
+                                    (it's better at coding!)
+                                </span>
                             )}
-                        </div>
-                        {selectedModel.id !== originalModelName &&
-                            modelHasSavedApiKey && (
-                                <Button onClick={handleUseNewModel}>
-                                    {'Use this model'}
+                    </div>
+                    {selectedModel?.id === 'custom' ? (
+                        <EnterCustomModel
+                            setHasClickedQuestion={setHasClickedQuestion}
+                            setOpen={setOpen}
+                            setModelHasSavedApiKey={setModelHasSavedApiKey}
+                            refetchModels={refetchModels}
+                        />
+                    ) : (
+                        <>
+                            <div className="flex justify-between w-full">
+                                <div className="flex gap-1 items-center mb-4 w-full">
+                                    <p className="text-xl font-bold">
+                                        {`${
+                                            selectedModel?.company
+                                                ? selectedModel?.company
+                                                : selectedModel?.id
+                                        } API Key`}
+                                    </p>
+                                    <Popover>
+                                        <PopoverTrigger
+                                            className="ml-[2px]"
+                                            onClick={() =>
+                                                setHasClickedQuestion(true)
+                                            }
+                                        >
+                                            <CircleHelp size={14} />
+                                        </PopoverTrigger>
+                                        <SafeStoragePopoverContent />
+                                    </Popover>
+                                    {hasClickedQuestion &&
+                                        !modelHasSavedApiKey &&
+                                        selectedModel?.apiKeyUrl && (
+                                            <a
+                                                className="text-primary hover:underline self-end ml-auto cursor-pointer"
+                                                href={selectedModel.apiKeyUrl}
+                                                target="_blank"
+                                            >
+                                                Looking for an API key?
+                                            </a>
+                                        )}
+                                </div>
+                                {selectedModel?.id !== originalModelName &&
+                                    modelHasSavedApiKey && (
+                                        <Button onClick={handleUseNewModel}>
+                                            {'Use this model'}
+                                        </Button>
+                                    )}
+                            </div>
+                            {selectedModel && (
+                                <APIKeyComponent
+                                    model={selectedModel}
+                                    setModelHasSavedApiKey={
+                                        setModelHasSavedApiKey
+                                    }
+                                    setOpen={setOpen}
+                                    refetchModels={refetchModels}
+                                />
+                            )}
+                            {selectedModel && selectedModel.apiBaseUrl && (
+                                <p
+                                    className="mt-2 text-gray-500 text-xs text-ellipsis max-w-[400px]"
+                                    title={selectedModel.apiBaseUrl}
+                                >
+                                    API Base: {selectedModel.apiBaseUrl}
+                                </p>
+                            )}
+                            {selectedModel && selectedModel.isCustom && (
+                                <Button
+                                    variant="outline-thin"
+                                    className="w-full mt-6"
+                                    onClick={handleDeleteCurrentCustomModel}
+                                >
+                                    Delete this model
                                 </Button>
                             )}
-                    </div>
-                    <APIKeyComponent
-                        key={selectedModel.id}
-                        model={selectedModel}
-                        sessionActorref={sessionActorref}
-                        setModelHasSavedApiKey={setModelHasSavedApiKey}
-                        setOpen={setOpen}
-                    />
+                        </>
+                    )}
                     {/* <Input
                         className="w-full"
                         type="password"
@@ -300,24 +372,36 @@ const General = ({ setOpen }: { setOpen: (val: boolean) => void }) => {
                     </div>
                 </CardContent>
             </Card> */}
-            <VersionControlSettingsCard />
-            <MiscellaneousCard
-                clearStorageAndResetSession={clearStorageAndResetSession}
-            />
+            {selectedModel?.id !== 'custom' ? (
+                <>
+                    <VersionControlSettingsCard />
+                    <MiscellaneousCard
+                        clearStorageAndResetSession={
+                            clearStorageAndResetSession
+                        }
+                    />
+                </>
+            ) : null}
         </div>
     )
 }
 
 const APIKeyComponent = ({
     model,
-    sessionActorref,
     setModelHasSavedApiKey,
     setOpen,
+    simple = false,
+    disabled = false,
+    isCustom = false,
+    refetchModels,
 }: {
     model: Model
-    sessionActorref: any
     setModelHasSavedApiKey: (value: boolean) => void
     setOpen: (value: boolean) => void
+    simple?: boolean
+    disabled?: boolean
+    isCustom?: boolean
+    refetchModels: (delay?: boolean) => void
 }) => {
     const { addApiKey, getApiKey, removeApiKey, setUseModelName } =
         useSafeStorage()
@@ -342,22 +426,27 @@ const APIKeyComponent = ({
         } else {
             setIsKeyStored(false)
             setModelHasSavedApiKey(false)
+            setKey('')
         }
         setIsLoading(false)
     }, [model.id])
 
     useEffect(() => {
         fetchApiKey()
-    }, [])
+    }, [model.id])
 
     const handleSave = async () => {
         setIsSaving(true)
         await addApiKey(model.id, key, false)
         // Update the model as well
         await setUseModelName(model.id, false)
+        refetchModels(true)
         const config: UpdateConfig = {
             api_key: key,
             model: model.id,
+        }
+        if (isCustom) {
+            addModel(model)
         }
         setOpen(false)
         setIsSaving(false)
@@ -381,14 +470,16 @@ const APIKeyComponent = ({
 
     return (
         <div>
-            <div className="flex items-center mb-2">
-                <p className="text-lg">{model.name}</p>
-                {model.comingSoon && (
-                    <p className="text-md px-2 text-neutral-500">
-                        (Coming soon!)
-                    </p>
-                )}
-            </div>
+            {!simple && (
+                <div className="flex items-center mb-2">
+                    <p className="text-lg">{model.name}</p>
+                    {model.comingSoon && (
+                        <p className="text-md px-2 text-neutral-500">
+                            (Coming soon!)
+                        </p>
+                    )}
+                </div>
+            )}
             {isLoading ? (
                 <Skeleton className="h-10 w-full" />
             ) : isKeyStored ? (
@@ -411,14 +502,16 @@ const APIKeyComponent = ({
                     <Input
                         id={model.id}
                         disabled={model.comingSoon || isSaving}
-                        placeholder={`${model.company} API Key`}
+                        placeholder={`${
+                            model.company ? model.company : 'Model'
+                        } API Key`}
                         type="password"
                         value={key}
                         onChange={e => setKey(e.target.value)}
                     />
                     {key.length > 0 && (
                         <Button
-                            disabled={model.comingSoon || isSaving}
+                            disabled={model.comingSoon || isSaving || disabled}
                             onClick={handleSave}
                         >
                             {/* {isSaving ? 'Saving...' : 'Save'} */}
@@ -437,10 +530,17 @@ const GeneralSettingsCard = ({
     folderPath,
     setFolderPath,
     handleChangePath,
-}: {
+    initialFolderPath,
+}: // handleNewChat
+{
     folderPath: string
     setFolderPath: (path: string) => void
-    handleChangePath: () => void
+    handleChangePath: (path: string) => void
+    initialFolderPath: {
+        loading: boolean
+        value: string
+    }
+    // handleNewChat: () => void
 }) => {
     return (
         <Card className="bg-midnight">
@@ -452,12 +552,19 @@ const GeneralSettingsCard = ({
                     folderPath={folderPath}
                     setFolderPath={setFolderPath}
                     showTitle={false}
-                    customButton={
-                        <Button onClick={handleChangePath}>Change</Button>
-                    }
+                    // customButton={
+                    //     <Button onClick={() => handleChangePath(folderPath)}>Change</Button>
+                    // }
                 />
-                {/* Commenting out for now, just does a refresh instead rn */}
-                {/* {!initialFolderPath.loading && initialFolderPath.value !== folderPath && <Button className="mt-5 w-full" onClick={handleNewChat}>Start new chat</Button>} */}
+                {!initialFolderPath.loading &&
+                    initialFolderPath.value !== folderPath && (
+                        <Button
+                            className="mt-5 w-full"
+                            onClick={handleChangePath}
+                        >
+                            Start new chat
+                        </Button>
+                    )}
             </CardContent>
         </Card>
     )
@@ -570,7 +677,7 @@ const VersionControlSettingsCard = () => {
                             Use git as version control system
                         </label>
                     </div>
-                    <div
+                    {/* <div
                         className={`flex flex-col gap-4 ${
                             !useGit ? 'opacity-50 hover:cursor-not-allowed' : ''
                         }`}
@@ -593,10 +700,10 @@ const VersionControlSettingsCard = () => {
                                 Create a new branch when starting a new session
                             </label>
                         </div>
-                    </div>
+                    </div> */}
                     {((useGit && config?.versioning_type !== 'git') ||
                         (!useGit && config?.versioning_type === 'git')) && (
-                        <span className="text-sm text-green-500 mt-2 flex gap-1 items-center">
+                        <span className="text-sm text-green-500 mt-0 flex gap-1 items-center">
                             <Info className="w-4 h-4" />
                             Note: Changes will apply once a new session is
                             created
@@ -638,5 +745,100 @@ const MiscellaneousCard = ({
                 </Button>
             </CardContent>
         </Card>
+    )
+}
+
+const EnterCustomModel = ({
+    setOpen,
+    setModelHasSavedApiKey,
+    refetchModels,
+}: {
+    setOpen: (v: boolean) => void
+    setModelHasSavedApiKey: (v: boolean) => void
+    refetchModels: (delay?: boolean) => void
+}) => {
+    const [customModel, setCustomModel] = useState<Model>({
+        id: '',
+        name: '',
+        company: '',
+    })
+
+    function handleSetCustomModel(field: keyof Model, value: string) {
+        setCustomModel(prev => ({ ...prev, [field]: value }))
+    }
+
+    return (
+        <div className="flex flex-col gap-5">
+            <div>
+                <div className="flex items-center mb-2 gap-1">
+                    <p className="text-lg">LiteLLM Model</p>
+                    <Popover>
+                        <PopoverTrigger className="ml-[2px]">
+                            <CircleHelp size={14} />
+                        </PopoverTrigger>
+                        <PopoverContent
+                            side="top"
+                            className="bg-night w-fit p-2 px-3 hover:border-primary cursor-pointer hover:bg-batman transition-colors duration-300"
+                            onClick={
+                                () =>
+                                    window.open(
+                                        'https://litellm.vercel.app/docs/providers/openai_compatible'
+                                    )
+                            }
+                        >
+                            Where do I find this?
+                        </PopoverContent>
+                    </Popover>
+                </div>
+                <Input
+                    value={customModel.id}
+                    onChange={e => {
+                        handleSetCustomModel('id', e.target.value)
+                        handleSetCustomModel('name', e.target.value)
+                    }}
+                    placeholder="Enter LiteLLM Model ID"
+                />
+            </div>
+            <div>
+                <p className="text-lg mb-2">API Base</p>
+                <Input
+                    value={customModel.apiBaseUrl}
+                    onChange={e =>
+                        handleSetCustomModel('apiBaseUrl', e.target.value)
+                    }
+                    placeholder="Enter API Base URL"
+                />
+            </div>
+            <div className="flex flex-col gap-2">
+                <div className="flex justify-between w-full">
+                    <div className="flex gap-1 items-center w-full">
+                        <p className="text-lg">
+                            {`${
+                                customModel.name
+                                    ? customModel.name
+                                    : customModel.id
+                            } API Key`}
+                        </p>
+                        <Popover>
+                            <PopoverTrigger
+                                className="ml-[2px]"
+                            >
+                                <CircleHelp size={14} />
+                            </PopoverTrigger>
+                            <SafeStoragePopoverContent />
+                        </Popover>
+                    </div>
+                </div>
+                <APIKeyComponent
+                    model={customModel}
+                    setOpen={setOpen}
+                    setModelHasSavedApiKey={setModelHasSavedApiKey}
+                    simple
+                    disabled={!customModel.id || !customModel.apiBaseUrl}
+                    isCustom
+                    refetchModels={refetchModels}
+                />
+            </div>
+        </div>
     )
 }

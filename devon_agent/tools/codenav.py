@@ -94,7 +94,7 @@ class CodeGoTo(Tool):
 
     @property
     def name(self):
-        return "code_goto"
+        return "go_to_definition_or_references"
 
     @property
     def supported_formats(self):
@@ -117,18 +117,19 @@ class CodeGoTo(Tool):
                 return self.function.__doc__
             case "manpage":
                 return """
-    CODE_GOTO(1)                   General Commands Manual                  CODE_GOTO(1)
+    GO_TO_DEFINITION_OR_REFERENCES(1)                   General Commands Manual                  GO_TO_DEFINITION_OR_REFERENCES(1)
 
     NAME
-            code_goto - find symbol's definition or all references and get a list of all the positions within the codebase
+            go_to_definition_or_references - find symbol's definition or all references and get a list of all the positions within the codebase
 
     SYNOPSIS
-            code_goto FILE_PATH LINE_NUMBER SYMBOL_STRING
+            go_to_definition_or_references FILE_PATH LINE_NUMBER SYMBOL_STRING
 
     DESCRIPTION
-            The code_goto command navigates to the specified symbol's definition or reference within the project files by using ast tree
+            The go_to_definition_or_references command navigates to the specified symbol's definition or reference within the project files by using ast tree
             and returns a lists all positions of the symbol in the rest of the codebase. To find reference, use it on a definition. To find definition, use it on reference.
-            This is not a simple sting matching
+            This is not a simple string matching. If you want to see the definition of a function or a class, use this. If you want to see references of a function or class, use this.
+            Use it to find all the function calls.
 
     OPTIONS
             FILE_PATH
@@ -141,12 +142,12 @@ class CodeGoTo(Tool):
                     The symbol string to navigate to and search for within the project files.
 
     RETURN VALUE
-            The code_goto command returns a string of all positions of the symbol in the rest of the codebase.
+            The go_to_definition_or_references command returns a string of all positions of the symbol in the rest of the codebase.
 
     EXAMPLES
             To navigate to a symbol "my_function" in file "example.py" at line 42 and find its positions:
 
-                    code_goto "example.py" 42 "my_function"
+                    go_to_definition_or_references "example.py" 42 "my_function"
     """
             case _:
                 raise ValueError(f"Invalid format: {format}")
@@ -155,11 +156,13 @@ class CodeGoTo(Tool):
         self, ctx: ToolContext, file_path: str, line_number: int, symbol_string: str
     ) -> str:
         """
-        command_name: code_goto
+        command_name: go_to_definition_or_references
         description: Navigates to the specified symbol's definition or reference within the code base
                     and lists all positions of the symbol in the rest of the codebase.
-        signature: code_goto [FILE_PATH] [LINE_NUMBER] [SYMBOL_STRING]
-        example: `code_goto "example.py" 42 "my_function"`
+                    Use it to find all the locations where the function or class is being called.
+                    If you want to see the definition of a function or a class, use this. If you want to see references of a function or class, use this.
+        signature: go_to_definition_or_references [FILE_PATH] [LINE_NUMBER] [SYMBOL_STRING]
+        example: `go_to_definition_or_references "example.py" 42 "my_function"`
         """
         try:
             # to tell the agent whether fuzzy search was enabled
@@ -183,9 +186,9 @@ class CodeGoTo(Tool):
             if start_index != -1:
                 end_index = start_index + len(symbol_string)
             else:
-                # Perform fuzzy search within ±2 lines if symbol is not found in the specified line
-                start_line = max(0, line_number - 3)  # 1 lines above
-                end_line = min(len(lines), line_number + 2)  # 2 lines below
+                # Perform fuzzy search within ±4 lines if symbol is not found in the specified line
+                start_line = max(0, line_number - 5)  # 1 lines above
+                end_line = min(len(lines), line_number + 4)  # 2 lines below
 
                 old_line_number = line_number
 
@@ -194,7 +197,7 @@ class CodeGoTo(Tool):
                 start_index = -1
                 end_index = -1
 
-                # Search for the symbol in the lines within ±2 lines
+                # Search for the symbol in the lines within ±4 lines
                 for i in range(start_line, end_line):
                     line_content = lines[i]
                     start_index = line_content.find(symbol_string)
@@ -208,7 +211,7 @@ class CodeGoTo(Tool):
                 # If symbol is not found, raise an error
                 if start_index == -1:
                     raise ValueError(
-                        f"Symbol '{symbol_string}' not found in line {line_number} or within ±2 lines of it in file {file_path}"
+                        f"Symbol '{symbol_string}' not found in line {line_number} or within ±4 lines of it in file {file_path}"
                     )
 
             # Run the go_to function

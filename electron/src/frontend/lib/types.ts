@@ -14,6 +14,8 @@ export type Model = {
     company: string
     comingSoon?: boolean
     apiKeyUrl?: string
+    apiBaseUrl?: string
+    isCustom?: boolean
 }
 
 export type Message = {
@@ -45,7 +47,7 @@ export type Checkpoint = {
     commit_message: string
     agent_history: any[]
     event_id: number
-    checkpoint_id: number
+    checkpoint_id: string
     index: number
 }
 
@@ -61,9 +63,9 @@ export type UpdateConfig = {
     api_key: string
 }
 
-
 export type CheckpointTracker = {
     initial: Checkpoint
     current: Checkpoint
     selected: Checkpoint | null
+    consumeCommitMessage?: string
 }

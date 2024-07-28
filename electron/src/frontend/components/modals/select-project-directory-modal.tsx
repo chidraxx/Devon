@@ -9,6 +9,8 @@ import { newSessionMachine } from '@/lib/services/stateMachineService/stateMachi
 import { useSafeStorage } from '@/lib/services/safeStorageService'
 import * as VisuallyHidden from '@radix-ui/react-visually-hidden'
 import IndexManagementModal from './index-management-modal'
+import { savedFolderPathAtom } from '@/lib/utils'
+import { useAtomValue } from 'jotai'
 
 const Dialog = lazy(() =>
     import('@/components/ui/dialog').then(module => ({
@@ -75,6 +77,7 @@ const SelectProjectDirectoryModal = ({
 
     const { getApiKey } = useSafeStorage()
     const [apiKey, setApiKey] = useState('')
+    const savedFolderPath = useAtomValue(savedFolderPathAtom)
 
     useEffect(() => {
         getApiKey(model).then(value => {
@@ -83,10 +86,17 @@ const SelectProjectDirectoryModal = ({
             }
         })
     }, [])
+    // }, [open])
 
     function checkIndexExists(s: string) {
         return true
     }
+
+    useEffect(() => {
+        if (savedFolderPath) {
+            setFolderPath(savedFolderPath)
+        }
+    }, [savedFolderPath])
 
     useEffect(() => {
         if (folderPath) {
@@ -112,7 +122,6 @@ const SelectProjectDirectoryModal = ({
     }
 
     async function afterSubmit() {
-
         sessionActorref.send({
             type: 'session.create',
             payload: {

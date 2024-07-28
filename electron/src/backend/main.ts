@@ -304,9 +304,9 @@ let mainWindow: BrowserWindow | null = null
 function createOrShowWindow() {
     if (mainWindow === null) {
         mainWindow = new BrowserWindow({
-            width: 800,
-            height: 600,
+            show: false,
             titleBarStyle: 'hidden',
+            backgroundColor: '#16161c',
             trafficLightPosition: { x: 15, y: 10 },
             webPreferences: {
                 preload: path.join(__dirname, 'preload.js'),
@@ -315,7 +315,8 @@ function createOrShowWindow() {
                 additionalArguments: [`--port=${use_port}`],
             },
         })
-
+        mainWindow.maximize()
+        mainWindow.show()
         if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
             mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL)
         } else {
@@ -327,7 +328,6 @@ function createOrShowWindow() {
             )
         }
 
-        mainWindow.maximize()
         mainWindow.setMenu(null)
 
         mainWindow.on('closed', () => {
@@ -371,26 +371,27 @@ app.on('ready', async () => {
 // for applications and their menu bar to stay active until the user quits
 // explicitly with Cmd + Q.
 
-let asyncOperationDone = false;
+let asyncOperationDone = false
 
 async function asyncOperation() {
     await axios.get(`http://localhost:${use_port}/sessions/UI/teardown`)
     await new Promise(resolve => setTimeout(resolve, 2000))
+    console.log("async complete")
 }
 
-app.on("window-all-closed", async (e: { preventDefault: () => void }) => {
+app.on('window-all-closed', async (e: { preventDefault: () => void }) => {
     mainLogger.info('All windows closed. Quitting application.')
 
-  if (!asyncOperationDone) {
-    e.preventDefault();
-    await asyncOperation();
-    asyncOperationDone = true;
-    console.log("async operation done, quitting");
-    serverProcess.kill('SIGINT')
-    mainLogger.info('Killing server process withpid:'+ serverProcess.pid)
-    app.quit();
-  }
-});
+    if (!asyncOperationDone) {
+        e.preventDefault()
+        await asyncOperation()
+        asyncOperationDone = true
+        console.log('async operation done, quitting')
+        serverProcess.kill('SIGINT')
+        mainLogger.info('Killing server process withpid:' + serverProcess.pid)
+        app.quit()
+    }
+})
 
 // app.on('window-all-closed', async () => {
 //     mainLogger.info('All windows closed. Quitting application.')
@@ -444,9 +445,15 @@ app.on('before-quit', () => {
         return
     }
 
-    mainLogger.info('Killing server process with        pid:', serverProcess.pid)
+    mainLogger.info(
+        'Killing server process with        pid:',
+        serverProcess.pid
+    )
     if (serverProcess.pid) {
-        mainLogger.info('Killing server process with       pid:', serverProcess.pid)
+        mainLogger.info(
+            'Killing server process with       pid:',
+            serverProcess.pid
+        )
         process.kill(serverProcess.pid, 'SIGTERM')
     }
     serverProcess.kill(9) // Make sure to kill the server process when the app is closing
@@ -643,10 +650,21 @@ ipcMain.handle('set-user-setting', async (event, setting) => {
         // Get existing settings and add to new
         const res = await settings.get(setting.setting)
         const existing = res ?? {}
-        await settings.set(setting.setting, {
-            ...existing,
-            [setting.key]: setting.value.toString(),
-        })
+        if (setting.key) {
+            await settings.set(setting.setting, {
+                ...existing,
+                [setting.key]: setting.value.toString(),
+            })
+        } else if (Array.isArray(setting.value)) {
+            // Replace the entire array if setting.value is an array
+            await settings.set(setting.setting, setting.value)
+        } else {
+            // Append to existing array if setting.value is not an array
+            if (!res) {
+                await settings.set(setting.setting, [setting.value])
+            }
+            await settings.set(setting.setting, [...existing, setting.value])
+        }
         return { success: true }
     } catch (error) {
         mainLogger.error(

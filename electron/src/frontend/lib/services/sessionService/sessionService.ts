@@ -30,7 +30,7 @@ export const useSessionConfig = (host: string, name: string) => {
     useEffect(() => {
         const interval = setInterval(() => {
             getSessionConfig(host, name).then(res => setConfig(res))
-        }, 1000)
+        }, 2000)
         // Clean up the interval when the component unmounts
         return () => clearInterval(interval)
     }, [host, name])
@@ -40,16 +40,24 @@ export const useSessionConfig = (host: string, name: string) => {
 export const getCheckpointDiff = async (
     host: string,
     name: string,
-    src_checkpoint_id: number,
-    dest_checkpoint_id: number
+    src_checkpoint_id: string, // commit hash
+    dest_checkpoint_id: string // commit hash
 ) => {
-    const response = await axios.get(`${host}/sessions/${name}/diff`, {
-        params: {
-            src_checkpoint_id,
-            dest_checkpoint_id,
-        },
-    })
-    return response.data
+    try {
+        const response = await axios.get(
+            `${host}/sessions/${name}/diff`,
+            {
+                params: {
+                    src_checkpoint_id,
+                    dest_checkpoint_id,
+                },
+            }
+        )
+        return response.data
+    } catch (error) {
+        console.error('Error fetching session config:', error)
+        throw error
+    }
 }
 
 // Not used yet

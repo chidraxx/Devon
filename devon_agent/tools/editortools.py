@@ -33,9 +33,12 @@ class OpenFileTool(Tool):
         return "open_file"
 
     def setup(self, ctx: ToolContext):
+        # if ctx["state"].get("editor") == None:
+        #     ctx["state"][""]
         ctx["state"]["editor"] = {}
         ctx["state"]["editor"]["files"] = {}
         ctx["state"]["editor"]["PAGE_SIZE"] = PAGE_SIZE
+        ctx["state"]["editor"]["open_file_count"] = 0  # Add a counter for open files
 
     def cleanup(self, ctx: ToolContext):
             del ctx["state"]["editor"]
@@ -56,21 +59,20 @@ class OpenFileTool(Tool):
 
     DESCRIPTION
             The open_file command opens a new file at the specified FILE_PATH within the
-            file system.
+            file system. A maximum of 4 files can be open at a time.
 
     OPTIONS
             FILE_PATH
                     The path of the file to create within the system.
 
     RETURN VALUE
-            The open_file command returns a boolean value:
+            The open_file command returns a string message:
 
-            True  If the file was successfully opened.
-
-            False If opening the file failed.
+            Success message if the file was successfully opened.
+            Error message if opening the file failed or if the maximum number of open files is reached.
 
     EXAMPLES
-            To open aa file at "/path/to/file.txt":
+            To open a file at "/path/to/file.txt":
 
                     open_file "/path/to/file.txt"
 
@@ -85,11 +87,14 @@ class OpenFileTool(Tool):
     def function(self, ctx, file_path):
         """
         command_name: open_file
-        description: opens a file in your editor interface so you can see it
+        description: opens a file in your editor interface so you can see it (maximum 4 files)
         signature: open_file [FILE_PATH]
         example: `open_file ./README.md`
         """
         try:
+            if ctx["state"]["editor"]["open_file_count"] >= 4:
+                raise Exception("Maximum of 4 files are already open. Close a file to open a new one.")
+
             abs_path = cwd_normalize_path(ctx, file_path)
 
             if abs_path in ctx["state"]["editor"]["files"]:
@@ -103,8 +108,9 @@ class OpenFileTool(Tool):
             ctx["state"]["editor"]["files"][abs_path] = {}
             ctx["state"]["editor"]["files"][abs_path]["lines"] = file_contents
             ctx["state"]["editor"]["files"][abs_path]["page"] = 0
+            ctx["state"]["editor"]["open_file_count"] += 1
 
-            return f"File {abs_path} opened in editor"
+            return f"File {abs_path} opened in editor (Open files: {ctx['state'].editor.open_file_count}/4)"
 
         except Exception as e:
             ctx["config"].logger.error(
@@ -123,9 +129,10 @@ class CloseFileTool(Tool):
         return "close_file"
 
     def setup(self, ctx: ToolContext):
-        ctx["state"]["editor"] = {}
-        ctx["state"]["editor"]["files"] = {}
-        ctx["state"]["editor"]["PAGE_SIZE"] = PAGE_SIZE
+        ctx["state"].editor = DotDict({})
+        ctx["state"].editor.files = {}
+        ctx["state"].editor.PAGE_SIZE = PAGE_SIZE
+        ctx["state"].editor.open_file_count = 0  # Add a counter for open files
 
     def cleanup(self, ctx: ToolContext):
         del ctx["state"]["editor"]
@@ -139,25 +146,24 @@ class CloseFileTool(Tool):
     CLOSE_FILE(1)                   General Commands Manual                  CLOSE_FILE(1)
 
     NAME
-            close_file - close a new file at the target path
+            close_file - close a file at the target path
 
     SYNOPSIS
             close_file FILE_PATH
 
     DESCRIPTION
-            The close_file command closes a new file at the specified FILE_PATH within the
+            The close_file command closes a file at the specified FILE_PATH within the
             file system.
 
     OPTIONS
             FILE_PATH
-                    The path of the file to create within the system.
+                    The path of the file to close within the system.
 
     RETURN VALUE
-            The close_file command returns a boolean value:
+            The close_file command returns a string message:
 
-            True  If the file was successfully opened.
-
-            False If opening the file failed.
+            Success message if the file was successfully closed.
+            Error message if closing the file failed.
 
     EXAMPLES
             To close a file at "/path/to/file.txt":
@@ -165,7 +171,7 @@ class CloseFileTool(Tool):
                 close_file "/path/to/file.txt"
 
     SEE ALSO
-            cat(1), echo(1)
+            open_file(1)
 
     CLOSE_FILE(1)                        April 2024                         CLOSE_FILE(1)
     """
@@ -185,8 +191,9 @@ class CloseFileTool(Tool):
         if abs_path not in ctx["state"]["editor"]["files"]:
             raise Exception(f"File {abs_path} not open in editor")
 
-        del ctx["state"]["editor"]["files"][abs_path]
-        return "Successfully closed file!"
+        del ctx["state"].editor.files[abs_path]
+        ctx["state"].editor.open_file_count -= 1
+        return f"Successfully closed file! (Open files: {ctx['state'].editor.open_file_count}/4)"
 
 
 class DeleteFileTool(Tool):

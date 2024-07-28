@@ -5,6 +5,8 @@ from devon_agent.tools.retrieval.file_tree.file_tree_tool import FileTreeTool
 from devon_agent.tools.utils import (_capture_window, cwd_normalize_path,
                                      file_exists, make_abs_path)
 
+import traceback
+
 
 class DeleteFileTool(Tool):
     @property
@@ -384,6 +386,7 @@ class SearchFileTool(Tool):
             case _:
                 raise ValueError(f"Invalid format: {format}")
 
+
     def function(self, ctx: ToolContext, search_term: str, file_path: str):
         """
         command_name: search_file
@@ -401,25 +404,30 @@ class SearchFileTool(Tool):
                 f"Failed to read file: {file_path}. Error: {str(e)}"
             )
             return f"Failed to read file: {file_path}. Error: {str(e)}"
+
         matches = []
-        tolerance = 10
         content_lines = content.splitlines()
         for i, line in enumerate(content_lines):
             if search_term in line:
-                matches.append(_capture_window(content_lines, i, tolerance))
-
-        if not matches:
-            return f'No matches found for "{search_term}" in {abs_path}'
+                matches.append((i, line))
 
         num_matches = len(matches)
 
-        if num_matches > 10:
-            return f'More than {10} lines matched for "{search_term}" in {abs_path}. Please narrow your search.'
+        if num_matches == 0:
+            return f'No matches found for "{search_term}" in {abs_path}'
+        elif num_matches > 50:
+            return f'More than 50 lines matched for "{search_term}" in {abs_path}. Please narrow your search.'
+        
+        # Adjust tolerance based on number of matches
+        tolerance = 2 if num_matches > 10 else 10
 
-        matches = "\n".join(matches)
-        result = f'Found {num_matches} matches for "{search_term}" in {abs_path}:\n {matches}'
+        formatted_matches = []
+        for line_num, _ in matches:
+            formatted_matches.append(_capture_window(content_lines, line_num, tolerance))
+
+        matches_text = "\n".join(formatted_matches)
+        result = f'Found {num_matches} matches for "{search_term}" in {abs_path}:\n{matches_text}'
         return result
-
 
 class FileTreeDisplay(Tool):
     fileTreeTool: FileTreeTool = Field(default=None)
@@ -483,7 +491,7 @@ class FileTreeDisplay(Tool):
             case _:
                 raise ValueError(f"Invalid format: {format}")
 
-    def function(self, ctx: ToolContext, dir_path: str = None) -> str:
+    def function(self, ctx: ToolContext, dir_path: str | None = None) -> str:
         """
         command_name: file_tree_display
         description: Displays the file tree structure in YAML format starting from the specified directory.
@@ -492,15 +500,26 @@ class FileTreeDisplay(Tool):
         example: `file_tree_display "/path/to/directory"`
         """
         try:
+            # print(ctx['config'])
+            self.fileTreeTool.set_ctx(ctx)
             if dir_path is None:
                 dir_path = self.fileTreeTool.root_dir
 
+            # print(self.fileTreeTool.get_large_tree(
+            #     dir_path, 500, 20
+            # ))
             result_list, result_tree = self.fileTreeTool.get_large_tree(
                 dir_path, 500, 20
             )
             return result_tree
         except Exception as e:
-            ctx["config"].logger.error(
-                f"Failed to display file tree for directory: {dir_path}. Error: {str(e)}"
-            )
-            return f"Failed to display file tree for directory: {dir_path}. Error: {str(e)}"
+            print("An error occurred:")
+            print(traceback.format_exc())
+            return(traceback.format_exc())
+        # except Exception as e:
+        #     ctx["config"].logger.error(
+        #         f"Failed to display file tree for directory: {dir_path}. Error: {str(e)}"
+        #     )
+        #     return f"Failed to display file tree for directory: {dir_path}. Error: {str(e)}"
+
+

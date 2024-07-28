@@ -25,14 +25,12 @@ const ChatInputField = ({
     viewOnly,
     eventContext,
     loading,
-    sessionId,
 }: {
     isAtBottom: boolean
     scrollToBottom: () => void
     viewOnly: boolean
     eventContext: any
     loading: boolean
-    sessionId: string
 }) => {
     const [focused, setFocused] = useState(false)
     const { formRef, onKeyDown } = useEnterSubmit()
@@ -50,13 +48,27 @@ const ChatInputField = ({
     const disableInput = loading || timeTraveling
     const prevProjectPath = useRef<string>('')
 
-    const [openProjectModal, setOpenProjectModal] = useState(false)
-    const { backendUrl } = useBackendUrl()
+    // const [openProjectModal, setOpenProjectModal] = useState(false)
+    // const { backendUrl } = useBackendUrl()
 
     const sessionActorRef = SessionMachineContext.useActorRef()
     const projectPath = SessionMachineContext.useSelector(
         state => state?.context?.sessionConfig?.path
     )
+    const status = SessionMachineContext.useSelector(
+        state => state?.context?.serverEventContext?.status
+    )
+
+    useEffect(() => {
+        // For autofilling the input field after finished loading (after a revert)
+        if (checkpointTracker?.consumeCommitMessage) {
+            setInput(checkpointTracker.consumeCommitMessage)
+            setCheckpointTracker({
+                ...checkpointTracker,
+                consumeCommitMessage: undefined,
+            })
+        }
+    }, [checkpointTracker?.consumeCommitMessage, loading])
 
     function clearSelectedCheckpoint() {
         if (checkpointTracker?.selected) {
@@ -74,7 +86,9 @@ const ChatInputField = ({
         } else if (prevProjectPath.current !== projectPath) {
             // Clear Jotai snippets
             setCodeSnippets([])
+            setSelectedCodeSnippet(null)
             setInput('')
+            setCheckpointTracker(null)
             prevProjectPath.current = projectPath
         }
     }, [projectPath, setCodeSnippets])
@@ -166,6 +180,7 @@ const ChatInputField = ({
                     paused={sessionActorRef.getSnapshot().matches('paused')}
                     pauseHandler={handlePause}
                     backInTime={Boolean(checkpointTracker?.selected)}
+                    status={status}
                 />
             )}
 
@@ -208,7 +223,7 @@ const ChatInputField = ({
                                 onFocus={handleFocus}
                                 onBlur={() => setFocused(false)}
                                 onKeyDown={onKeyDown}
-                                value={input}
+                                value={timeTraveling || loading ? '' : input}
                                 onChange={e => setInput(e.target.value)}
                                 disabled={disableInput}
                                 codeSnippets={codeSnippets}
@@ -265,6 +280,7 @@ const InformationBox = ({
     paused,
     pauseHandler,
     backInTime,
+    status,
 }: {
     modelLoading: boolean
     userRequested: boolean
@@ -272,6 +288,7 @@ const InformationBox = ({
     paused: boolean
     pauseHandler: () => void
     backInTime: boolean
+    status: string | null
 }) => {
     const types: {
         [key: string]: {
@@ -303,8 +320,16 @@ const InformationBox = ({
             text: 'Devon is time traveling with you...',
             accessory: <></>,
         },
+        executing: {
+            text: 'Devon is using a tool...',
+            accessory: (
+                <PauseButton paused={paused} pauseHandler={pauseHandler} />
+            ),
+        },
         error: {
-            text: 'Something went wrong',
+            // text: 'Something went wrong',
+            // text: 'Something unexpected occurred',
+            text: 'Devon is cleaning up his desk...',
             accessory: <></>,
         },
     }
@@ -315,12 +340,13 @@ const InformationBox = ({
     } else if (backInTime) {
         currentType = types.backInTime
     } else if (paused) {
-        // console.log("type is paused")
         currentType = types.paused
     } else if (modelLoading) {
         currentType = types.modelLoading
     } else if (userRequested) {
         currentType = types.userRequested
+    } else if (status === 'executing') {
+        currentType = types.executing
     } else {
         currentType = types.error
     }
