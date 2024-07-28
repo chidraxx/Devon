@@ -256,6 +256,9 @@ class SweBenchConfig(BaseModel):
     environment: EnvironmentArguments
     # Only run instances that completely match this regex
     instance_filter: str = ".*"
+
+    instances: List[str]
+    
     # Skip instances with existing trajectories
     skip_existing: bool = True
     # Suffix for the run name (used for example in trajectory directory naming)
@@ -402,6 +405,7 @@ class SweBenchSession:
         return docs
     
     def _save_predictions(self, instance_id: str, info):
+        print("PRDEICTIONS")
         output_file = self.traj_dir / "all_preds.jsonl"
         model_patch = info["submission"] if "submission" in info else None
         datum = {
@@ -454,7 +458,7 @@ class SweBenchSession:
         steps = 0
         observation = ""
         trajectory = []
-        while steps < 1:
+        while steps < 15:
             steps+=1
             thought, action, output = self.agent.predict(
                 issue, observation,self
@@ -556,13 +560,14 @@ class SweBenchSession:
             info["submission"] = submission
             observation = "Exited (autosubmitted)"
             self.logger.info("Exiting with autosubmission")
-            return observation, 0, True, info
+            # return observation, 0, True, info
+
         except KeyboardInterrupt:
             raise
         except:
             self.logger.error(traceback.format_exc())
             pass
-
+        
         save_trajectory(trajectory, self.traj_dir / f"{instance_id}.traj", "swebench", info)
 
         self._save_predictions(instance_id, info)
@@ -570,6 +575,11 @@ class SweBenchSession:
 
     def should_skip(self, instance_id: str) -> bool:
         """Check if we should skip this instance based on the instance filter and skip_existing flag."""
+
+        if self.config.instances:
+            if instance_id not in self.config.instances:
+                return True
+
         # Skip instances that don't match the instance filter
         if re.match(self.config.instance_filter, instance_id) is None:
             self.logger.info(f"⏭️ Instance filter not matched. Skipping instance {instance_id}")
@@ -613,7 +623,7 @@ class SweBenchSession:
             instance_id = record["instance_id"]
             assert isinstance(instance_id, str)  # mypy
             if self.should_skip(instance_id):
-                self.logger(f"Skipping instance {instance_id}")
+                self.logger.info(f"Skipping instance {instance_id}")
                 continue
             self.run_task(index)
 
@@ -634,6 +644,7 @@ if __name__ == "__main__":
         skip_existing=True,
         environment=EnvironmentArguments(
         ),
+        instances=["django__django-11999"],
         agent_config=AgentConfig(
             model="gpt4-o",
             agent_name="devon",
