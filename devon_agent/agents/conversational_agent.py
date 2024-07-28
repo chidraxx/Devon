@@ -129,8 +129,6 @@ The following is the file tree of the codebase
         )
 
         history = anthropic_history_to_bash_history(self.agent_config.chat_history)
-        print("history", history)
-        # history_with_file_tree = self._prepare_file_tree(session.config.path) + history
         system_prompt = conversational_agent_system_prompt_template_v3(command_docs)
         last_user_prompt = conversational_agent_last_user_prompt_template_v3(
             history,
