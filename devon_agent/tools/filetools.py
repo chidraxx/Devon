@@ -1,7 +1,7 @@
 from pydantic import Field
 
 from devon_agent.tool import Tool, ToolContext
-from devon_agent.tools.retrieval.file_tree.file_tree_tool import FileTreeTool
+from devon_agent.tools.retrieval.file_tree.file_tree_tool_without_env import FileTreeTool
 from devon_agent.tools.utils import (_capture_window, cwd_normalize_path,
                                      file_exists, make_abs_path)
 
@@ -501,7 +501,7 @@ class FileTreeDisplay(Tool):
         """
         try:
             # print(ctx['config'])
-            self.fileTreeTool.set_ctx(ctx)
+            # self.fileTreeTool.set_ctx(ctx)
             if dir_path is None:
                 dir_path = self.fileTreeTool.root_dir
 
