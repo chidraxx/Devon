@@ -132,7 +132,7 @@ class Session:
                 "code_search": CodeSearch(),
                 "go_to_definition_or_references": CodeGoTo(),
                 "file_tree_display": FileTreeDisplay(),
-                "ask_codebase": SemanticSearch(),
+                # "ask_codebase": SemanticSearch(),
                 "close_file": CloseFileTool()
             }
         

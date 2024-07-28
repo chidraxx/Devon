@@ -662,10 +662,12 @@ if __name__ == "__main__":
                     persist_to_db=False,
                     environments={"local": env},
                     default_environment="local",
+                    checkpoints=[],
                     agent_configs=[
                     ],
                     ignore_files=True,
                     devon_ignore_file=".devonignore",
+                    state=None,
                         )
             }
         
