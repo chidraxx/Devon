@@ -110,7 +110,7 @@ class OpenFileTool(Tool):
             ctx["state"]["editor"]["files"][abs_path]["page"] = 0
             ctx["state"]["editor"]["open_file_count"] += 1
 
-            return f"File {abs_path} opened in editor (Open files: {ctx['state'].editor.open_file_count}/4)"
+            return f"File {abs_path} opened in editor (Open files: {ctx['state']['editor']['open_file_count']}/4)"
 
         except Exception as e:
             ctx["config"].logger.error(
@@ -129,10 +129,10 @@ class CloseFileTool(Tool):
         return "close_file"
 
     def setup(self, ctx: ToolContext):
-        ctx["state"].editor = DotDict({})
-        ctx["state"].editor.files = {}
-        ctx["state"].editor.PAGE_SIZE = PAGE_SIZE
-        ctx["state"].editor.open_file_count = 0  # Add a counter for open files
+        ctx["state"]["editor"] = {}
+        ctx["state"]["editor"]["files"] = {}
+        ctx["state"]["editor"]["PAGE_SIZE"] = PAGE_SIZE
+        ctx["state"]["editor"]["open_file_count"] = 0  # Add a counter for open files
 
     def cleanup(self, ctx: ToolContext):
         del ctx["state"]["editor"]
@@ -191,9 +191,9 @@ class CloseFileTool(Tool):
         if abs_path not in ctx["state"]["editor"]["files"]:
             raise Exception(f"File {abs_path} not open in editor")
 
-        del ctx["state"].editor.files[abs_path]
-        ctx["state"].editor.open_file_count -= 1
-        return f"Successfully closed file! (Open files: {ctx['state'].editor.open_file_count}/4)"
+        del ctx["state"]["editor"]["files"][abs_path]
+        ctx["state"]["editor"]["open_file_count"] -= 1
+        return f"Successfully closed file! (Open files: {ctx['state']['editor']['open_file_count']}/4)"
 
 
 class DeleteFileTool(Tool):
