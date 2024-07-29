@@ -511,7 +511,7 @@ class FileTreeDisplay(Tool):
             result_list, result_tree = self.fileTreeTool.get_large_tree(
                 dir_path, 500, 20
             )
-            return result_tree
+            return f'<FileTree>{result_tree}</FileTree>'
         except Exception as e:
             print("An error occurred:")
             print(traceback.format_exc())

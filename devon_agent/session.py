@@ -14,7 +14,7 @@ from devon_agent.config import Checkpoint, Config
 from devon_agent.data_models import _delete_session_util, _save_session_util
 from devon_agent.tool import ToolNotFoundException
 from devon_agent.tools import parse_command
-from devon_agent.tools.codenav import CodeGoTo, CodeSearch
+from devon_agent.tools.codenav import CodeGoTo, CodeSearch, RegexSearch
 from devon_agent.tools.editortools import (CloseFileTool, CreateFileTool, DeleteFileTool,
     OpenFileTool, save_create_file, save_delete_file, ScrollDownTool, ScrollToLineTool,
     ScrollUpTool)
@@ -129,10 +129,10 @@ class Session:
                 "get_cwd": GetCwdTool(),
                 "no_op": NoOpTool(),
                 "delete_file": DeleteFileTool().register_post_hook(save_delete_file),
-                "code_search": CodeSearch(),
+                "regex_search": RegexSearch(),
                 "go_to_definition_or_references": CodeGoTo(),
                 "file_tree_display": FileTreeDisplay(),
-                # "ask_codebase": SemanticSearch(),
+                "ask_codebase": SemanticSearch(),
                 "close_file": CloseFileTool()
             }
         

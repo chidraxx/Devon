@@ -171,6 +171,7 @@ mathweb/flask/app.py
         print("raw_command", context.get("raw_command", ""))
         raw_command = context.get("raw_command", "")
         edit_content = self._extract_edit_content(raw_command)
+        print("dddd", edit_content)
         if not edit_content:
             return "Error: No edit content provided"
         if edit_content.strip() == "":

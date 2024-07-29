@@ -5,6 +5,119 @@ import code_nav_devon
 from pydantic import Field
 
 from devon_agent.tool import Tool, ToolContext
+from devon_agent.tools.retrieval.regex.query_regex import regex_search
+from devon_agent.tools.utils import cwd_normalize_path
+
+class RegexSearch(Tool):
+    base_path: str = Field(default=None)
+    temp_dir: tempfile.TemporaryDirectory = Field(default=None)
+
+    class Config:
+        arbitrary_types_allowed = True
+
+    @property
+    def name(self):
+        return "regex_search"
+
+    @property
+    def supported_formats(self):
+        return ["docstring", "manpage"]
+
+    def setup(self, ctx):
+        self.base_path = ctx["environment"].path
+
+    def cleanup(self, ctx):
+        if self.temp_dir:
+            self.temp_dir.cleanup()
+            self.temp_dir = None
+
+    def documentation(self, format="docstring"):
+        match format:
+            case "docstring":
+                return self.function.__doc__
+            case "manpage":
+                return """
+    REGEX_SEARCH(1)                   General Commands Manual                  REGEX_SEARCH(1)
+
+    NAME
+            regex_search - perform regex search within Python files in the project
+
+    SYNOPSIS
+            regex_search PATTERN [DIR_PATH]
+
+    DESCRIPTION
+            The regex_search command performs a regex search for the specified pattern within all Python files in the project.
+
+    OPTIONS
+            PATTERN
+                    The regex pattern to search for within the project files. This pattern follows Python's re module syntax.
+            
+            DIR_PATH
+                    The path of the directory whose content you want to search in.
+                    If not given, it will take the base path of the codebase
+
+    RETURN VALUE
+            A string containing all the match with their context.
+
+    EXAMPLES
+           1. Search for a specific function definition:
+               regex_search "def\\s+process_data\\s*\\(" 3
+
+            2. Search for a specific class definition:
+               regex_search "class\\s+UserProfile\\s*\\(" 2
+
+            3. Search for calls to a specific method on a particular object:
+               regex_search "request\\.user\\.is_authenticated\\s*\\(" 2
+
+            4. Search for imports from a specific module:
+               regex_search "from\\s+django\\.shortcuts\\s+import\\s+" 1
+
+            5. Search for assignments to a specific variable:
+               regex_search "^\\s*MAX_RETRIES\\s*=" 1
+
+            basically feel free to use the full potential of regex
+
+    NOTE: When using the command line, you may need to escape backslashes and quotes according to your shell's rules. For example:
+          regex_search "def\\\\s+[a-zA-Z_][a-zA-Z0-9_]*\\\\s*\\\\(" 3
+    """
+            case _:
+                raise ValueError(f"Invalid format: {format}")
+
+    def function(self, ctx: ToolContext, pattern: str, dir_path: str | None = None) -> str:
+        """
+        command_name: regex_search
+        description: Performs a regex search in Python files. Accepts a regex pattern and an optional directory path. Returns matches with context as a string. Uses Python's re syntax. Useful for finding functions, classes, or specific code patterns.
+        signature: regex_search PATTERN [DIR_PATH]
+        example: `regex_search "def process_data\\s*\\(" /path/to/project`
+        """
+        try:
+            window = 10
+            path = None
+            if dir_path is None:
+                path = self.base_path  
+            else:
+                path = cwd_normalize_path(ctx, dir_path)
+
+            results = regex_search(path, pattern, window)
+
+            num_matches = len(results)
+
+            if num_matches == 0:
+                return f'No matches found for "{pattern}" in {path}'
+            elif num_matches > 25:
+                return f'More than 50 lines matched for "{pattern}" in {path}. Please narrow your search.'
+
+            output = ""
+            
+            output += f'Found {num_matches} matches for "{pattern}" in {path}:\n'
+            output = "\n".join(results)
+            return output
+        
+        except Exception as e:
+            ctx["config"].logger.error(
+                f"Regex search failed for pattern: {pattern}. Error: {str(e)}"
+            )
+            return f"Regex search failed for pattern: {pattern}. Error: {str(e)}"
 
 
 class CodeSearch(Tool):
