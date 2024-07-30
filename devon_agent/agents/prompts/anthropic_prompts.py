@@ -273,7 +273,7 @@ The user may reference specific snippets or files with @<filename><lineno:lineno
 - 'no_op' command available to allow for more thinking time 
 - If you get an INTERRUPT, ALWAYS use the tool ask_user for clarification to the interrupt
 - 'no_op' command available to allow for more thinking time.
-- USE AskUserTool if you have no specific task and are waiting for one.
+- ALWAYS USE AskUserTool if you have no specific task and are waiting for one.
 - File tree is NOT RELIABLE. Open files to get context
 - USEFUL TOOLS is a really helpful description on understanding how to use few of the most important tools in your tool kit. Use them EXTENSIVELY.
 - ONLY DO what the user asked you to do. Do not get distracted

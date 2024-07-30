@@ -1,13 +1,46 @@
 import os
 import re
+import pathspec
 
 def regex_search(path, pattern, window=2):
     regex = re.compile(pattern)
     results = []
     
+    def load_gitignore_specs(root_path):
+        ignore_specs = []
+        for dirpath, dirnames, filenames in os.walk(root_path, topdown=True):
+            if '.gitignore' in filenames:
+                gitignore_path = os.path.join(dirpath, '.gitignore')
+                with open(gitignore_path, 'r') as gitignore_file:
+                    spec = pathspec.PathSpec.from_lines('gitwildmatch', gitignore_file)
+                    ignore_specs.append((dirpath, spec))
+            
+            # Don't traverse into ignored directories
+            dirnames[:] = [d for d in dirnames if not is_ignored(os.path.join(dirpath, d), ignore_specs)]
+
+        # Sort ignore_specs so that root comes first, then by path length (descending)
+        ignore_specs.sort(key=lambda x: (x[0] != root_path, -len(x[0])))
+        return ignore_specs
+
+    def is_ignored(path, ignore_specs):
+        path = os.path.abspath(path)
+        
+        for spec_path, spec in ignore_specs:
+            if path.startswith(spec_path):
+                # Get the path relative to the .gitignore file
+                relative_path = os.path.relpath(path, spec_path)
+                if spec.match_file(relative_path):
+                    return True
+        
+        return False
+
     def process_file(file_path):
-        with open(file_path, 'r') as f:
-            lines = f.readlines()
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+        except Exception as e:
+            print(f"Error processing {file_path}: {str(e)}")
+            return
         
         file_results = []
         last_end = -1
@@ -36,20 +69,25 @@ def regex_search(path, pattern, window=2):
         if path.endswith('.py'):
             process_file(path)
     elif os.path.isdir(path):
-        # If path is a directory, walk through it
-        for root, _, files in os.walk(path):
+        # If path is a directory, load gitignore specs and walk through it
+        ignore_specs = load_gitignore_specs(path)
+        for root, dirs, files in os.walk(path):
+            # Remove ignored directories
+            dirs[:] = [d for d in dirs if not is_ignored(os.path.join(root, d), ignore_specs)]
+            
             for file in files:
                 if file.endswith('.py'):
                     file_path = os.path.join(root, file)
-                    process_file(file_path)
+                    if not is_ignored(file_path, ignore_specs):
+                        process_file(file_path)
     else:
         raise ValueError(f"Invalid path: {path}. Must be a file or directory.")
     
     return results
 
 if __name__ == "__main__":
-    directory = "/Users/arnav/Desktop/pytest/pytest"
-    pattern = r"\ball\("
+    directory = "/Users/arnav/Desktop/devon/Devon"
+    pattern = r"regex_search"
     window = 5
     
     results = regex_search(directory, pattern, window)

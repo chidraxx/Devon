@@ -151,7 +151,7 @@ class CodeGraphManager:
             # except Exception as e:
             #     print(f"An unexpected error occurred while building the graph for {language}: {e}")
 
-    def estimate_cost(self):
+    def estimate_cost(self, ctx = None):
         def find_node_id_by_file_path(dir_node_id, file_path):
             for child in self.graph_constructor.graph.successors(dir_node_id):
                 if self.graph_constructor.graph.nodes[child].get("file_path") == file_path:
@@ -171,7 +171,7 @@ class CodeGraphManager:
             ignore_dirs=["__pycache__"]
         )
 
-        actions, current_hashes = self.graph_constructor.build_or_update_graph(ctx = ctx)
+        actions, current_hashes = self.graph_constructor.build_or_update_graph()
 
         all_collected_node_ids = set()
 

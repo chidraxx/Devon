@@ -236,4 +236,5 @@ class SemanticSearch(Tool):
             return result
         
         except Exception as e:
+            ctx["config"].logger.info(f"error in semantic search {traceback.print_exc()}")
             return str(e)

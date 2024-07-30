@@ -7,6 +7,7 @@ from pydantic import Field
 from devon_agent.tool import Tool, ToolContext
 from devon_agent.tools.retrieval.regex.query_regex import regex_search
 from devon_agent.tools.utils import cwd_normalize_path
+import traceback
 
 class RegexSearch(Tool):
     base_path: str = Field(default=None)
@@ -91,7 +92,7 @@ class RegexSearch(Tool):
         example: `code_search "def process_data\\s*\\(" /path/to/project`
         """
         try:
-            window = 1
+            window = 2
             path = None
             if dir_path is None:
                 path = self.base_path  

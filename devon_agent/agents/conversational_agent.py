@@ -134,7 +134,7 @@ The following is the file tree of the codebase
         print("path", session.config.path)
         history_with_file_tree = self._prepare_file_tree(session.config.path) + history
         last_user_prompt = conversational_agent_last_user_prompt_template_v3(
-            history,
+            history_with_file_tree,
             editor,
             get_cwd(
                 {
