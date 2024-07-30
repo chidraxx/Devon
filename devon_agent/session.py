@@ -672,17 +672,7 @@ class Session:
             current_branch = get_current_branch(self.config.path)
 
             if current_branch[0] != 0:
-                result = git_error(
-                    "Was not able to get the current branch. Error from command: \n "
-                    + current_branch[1],
-                    self.event_log,
-                )
-                if result == "nogit":
-                    self.config.versioning_type = "none"
-                    return "disabled"
-                if result == "resolvedError":
-                    return "retry"
-                
+                return "failed " + current_branch[1]
 
             if current_branch[1] == self.config.versioning_metadata.get("user_branch", None):
                 return "success"
@@ -690,20 +680,11 @@ class Session:
             if current_branch[1] == "devon_agent" and self.config.versioning_metadata.get("user_branch", None):
                 rc, output = checkout_branch(self.config.path, self.config.versioning_metadata["user_branch"])
                 if rc != 0:
-                    result = git_error(
-                        "Was not able to checkout the user branch. Error from command: \n "
-                        + output,
-                        self.event_log,
-                    )
-                    if result == "nogit":
-                        self.config.versioning_type = "none"
-                        return "disabled"
-                    if result == "resolvedError":
-                        return "retry"
+                    return "failed " + output
                 
 
                 # first checkpoint
-                for checkpoint in self.config.checkpoints:
+                for checkpoint in self.config.checkpoints[::-1]:
                     if checkpoint.merged_commit != None:
                         first_checkpoint = checkpoint
                         break
@@ -714,16 +695,7 @@ class Session:
                 if merge_patch[0] != 0:
                     self.logger.error("Error getting diff patch " + merge_patch[1])
                     if rc != 0:
-                        result = git_error(
-                            "Was not able to checkout the user branch. Error from command: \n "
-                            + output,
-                            self.event_log,
-                        )
-                        if result == "nogit":
-                            self.config.versioning_type = "none"
-                            return "disabled"
-                        if result == "resolvedError":
-                            return "retry"
+                        return "failed " + merge_patch[1]
 
                 with tempfile.NamedTemporaryFile(delete=False) as temp_file:
                     temp_file.write(merge_patch[1].encode())
@@ -736,31 +708,13 @@ class Session:
                     )
                     if rc != 0:
                         self.logger.error("Error checking out user branch " + branch)
-                        result = git_error(
-                            "Was not able to checkout the user branch. Error from command: \n "
-                            + output,
-                            self.event_log,
-                        )
-                        if result == "nogit":
-                            self.config.versioning_type = "none"
-                            return "disabled"
-                        if result == "resolvedError":
-                            return "retry"  
+                        return "failed " + branch
 
                     rc, out = apply_patch(self.config.path, temp_file.name)
 
                     if rc != 0:
                         self.logger.error("Error applying patch " + out)
-                        result = git_error(
-                            "Error applying patch " + out,
-                            self.event_log,
-                        )
-                        if result == "nogit":
-                            self.config.versioning_type = "none"
-                            return "disabled"
-                        if result == "resolvedError":
-                            return "retry"
-                        
+                        return "failed " + out
 
         if self.config.versioning_type == "git" and action == "reset":
             self.logger.info(f"Resetting session")
@@ -1293,10 +1247,10 @@ class Session:
             return False,"User branch not found"
 
         if merge_patch[0] == 0:
-
             rc, branch = checkout_branch(
                 self.config.path, self.config.versioning_metadata["user_branch"]
             )
+            rc, current_branch = self.versioning.get_branch()  
             if rc != 0:
                 self.logger.error("Error checking out user branch " + branch)
                 return False,"Error checking out user branch"

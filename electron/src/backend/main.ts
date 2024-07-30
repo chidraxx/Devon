@@ -114,7 +114,7 @@ const createLogger = (service: string) => {
     })
 }
 
-const BACKEND_MINIMUM_VERSION = '0.1.21'
+const BACKEND_MINIMUM_VERSION = '0.1.25'
 
 function checkBackendExists(): { passed: boolean; message?: string } {
     try {
@@ -440,7 +440,7 @@ app.on('activate', async () => {
 // })
 
 app.on('before-quit', () => {
-    if (!serverProcess || serverProcess.killed) {
+    if (!serverProcess) {
         mainLogger.info('No server process found. Quitting application.')
         return
     }
@@ -449,13 +449,13 @@ app.on('before-quit', () => {
         'Killing server process with        pid:',
         serverProcess.pid
     )
-    if (serverProcess.pid) {
-        mainLogger.info(
-            'Killing server process with       pid:',
-            serverProcess.pid
-        )
-        process.kill(serverProcess.pid, 'SIGTERM')
-    }
+    // if (serverProcess.pid) {
+    //     mainLogger.info(
+    //         'Killing server process with       pid:',
+    //         serverProcess.pid
+    //     )
+    //     process.kill(serverProcess.pid, 'SIGTERM')
+    // }
     serverProcess.kill(9) // Make sure to kill the server process when the app is closing
 
     if (serverProcess.killed) {

@@ -206,26 +206,24 @@ def git_reset_soft(path, commit_hash):
 
 def commit_all_files(path, commit_message, allow_empty=False,prev_untracked_files=[]):
 
-    if prev_untracked_files:
-        # find difference between prev_untracked_files and current untracked files
-        # add difference
-        current_untracked_files = subprocess.run(["git", "ls-files", "--others", "--exclude-standard"], cwd=path, capture_output=True, text=True)
-        difference = list(set(prev_untracked_files) - set(current_untracked_files))
-        # add difference
-        result = subprocess.run(["git", "add", *difference], cwd=path, capture_output=True, text=True)
-        if result.returncode != 0:
-            return result.returncode, result.stderr
 
         
 
     # add all files
     result = subprocess.run(["git", "add", "."], cwd=path, capture_output=True, text=True)
     if result.returncode != 0:
+        print("ERROR ADDING FILES", result.stderr)
         return result.returncode, result.stderr
     # commit all files
-    result = subprocess.run(["git", "commit", "-m", commit_message,"--allow-empty" if allow_empty else ""], cwd=path, capture_output=True, text=True)
+    command = ["git", "commit", "-m", commit_message]
+    if allow_empty:
+        command += ["--allow-empty"]
+    print(command,flush=True)
+    result = subprocess.run(command, cwd=path, capture_output=True, text=True)
 
     if result.returncode != 0:
+        print(["git", "commit", "-m", commit_message] + ["--allow-empty"] if allow_empty else [],flush=True)
+        print("ERROR COMMITTING FILES", result.stderr)
         return result.returncode, result.stderr + result.stdout
     # get commit hash
     result = subprocess.run(["git", "rev-parse", "HEAD"], cwd=path, capture_output=True, text=True)

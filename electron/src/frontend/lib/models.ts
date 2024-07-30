@@ -132,7 +132,7 @@ export const useModels = () => {
                 const allModels = await getAllModels()
                 setModels(allModels)
 
-                const modelsWithCustom = [...allModels, customOption]
+                const modelsWithCustom = [...allModels]
                 const items: ExtendedComboboxItem[] = modelsWithCustom
                     .filter(model => !model.comingSoon)
                     .map(model => ({

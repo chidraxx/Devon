@@ -2,7 +2,7 @@ import re
 from difflib import SequenceMatcher
 
 from devon_agent.tool import Tool, ToolContext
-from devon_agent.tools.utils import make_abs_path, read_file, write_file
+from devon_agent.tools.utils import cwd_normalize_path, make_abs_path, read_file, write_file
 
 # from .editblock_prompts import EditBlockPrompts
 
@@ -262,7 +262,7 @@ mathweb/flask/app.py
             #     results.append({'status': 'error', 'message': f"File not found: {filename}"})
             #     continue
 
-            file_path = make_abs_path(context, filename)
+            file_path = cwd_normalize_path(context, filename)
 
             # file_exists = (
             #     context["environment"]
