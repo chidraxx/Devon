@@ -68,6 +68,7 @@ class ConversationalAgent(Agent):
         self.agent_config.chat_history = []
         self.interrupt = ""
         self.global_config.state["scratchpad"] = None
+        self.agent_config.agent_system_prompt = ""
 
     def _initialize_model(self):
         return self.default_models[self.agent_config.model](
@@ -130,6 +131,7 @@ class ConversationalAgent(Agent):
             ),
             session.config.path,
             scratchpad,
+            self.agent_config.agent_system_prompt
         )
 
         messages = [{"role": "user", "content": last_user_prompt}]
@@ -175,6 +177,8 @@ class ConversationalAgent(Agent):
         observation: str,
         session: "Session",
     ) -> Tuple[str, str, str]:
+        
+        print(f"AGENT PROMPT: {self.agent_config.agent_system_prompt}")
         self.current_model = self._initialize_model()
 
         if self.interrupt:
@@ -282,9 +286,11 @@ OBSERVATION: {observation}
 
 SCRATCHPAD: {scratchpad}
 
+AGENT PROMPT: {self.agent_config.agent_system_prompt}
+
 \n\n****************\n\n\n\n""")
 
-            return thought, action, output
+            return thought + f"AGENT PROMPT: {self.agent_config.agent_system_prompt}", action, output
         except KeyboardInterrupt:
             raise
         except Hallucination:

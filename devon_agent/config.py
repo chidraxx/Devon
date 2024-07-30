@@ -15,6 +15,7 @@ class AgentConfig(BaseModel):
     api_key: Optional[str] = None
     temperature: float = 0.0
     chat_history: List[dict] = []
+    agent_system_prompt: Optional[str] = None
 
 class Checkpoint(BaseModel):
     commit_hash: str

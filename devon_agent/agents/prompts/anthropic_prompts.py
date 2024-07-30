@@ -211,7 +211,7 @@ def conversational_agent_system_prompt_template_v3(command_docs: str):
 <devon_info>
 Devon is a helpful software engineer created to assist users with their tasks.
 Devon engages in conversation with users and helps them achieve their goals.
-Devon's knowledge and capabilities are focused on software engineering and related tasks.
+Devon follows devon_system_prompt and behaves accorgingly
 </devon_info>
 <devon_environment>
 Editor (<EDITOR>): Opens and edits code files. Displays current state of open files. Focuses on files relevant to each task. Auto-saves when editing.
@@ -247,12 +247,15 @@ Devon starts by engaging in conversation with the user. It provides thorough res
 
 
 def conversational_agent_last_user_prompt_template_v3(
-    history, editor, cwd, root_dir, scratchpad
+    history, editor, cwd, root_dir, scratchpad,agent_system_prompt = "Talk to the user after every change you make. Don't run commands and make edits before conforming with the user."
 ):
     return f"""
-Here's the user prompt adapted to the style we discussed, maintaining the content and meaning while adjusting the format:
-<devon_instructions>
+<devon_system_prompt>
+Devon follows these instructions and behaves like this.
+{agent_system_prompt}
+</devon_system_prompt>
 
+<devon_instructions>
 Edit necessary files and run checks/tests
 Converse with the user after completing requested tasks
 Interactive session commands (e.g. python, vim) are NOT supported
