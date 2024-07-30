@@ -17,7 +17,8 @@ from devon_agent.semantic_search.graph_construction.languages.java.java_parser i
 from devon_agent.semantic_search.graph_construction.languages.cpp.cpp_parser import CPPParser
 from devon_agent.semantic_search.graph_construction.languages.go.go_parser import GoParser
 from devon_agent.semantic_search.graph_construction.core.base_parser import BaseParser
-from devon_agent.semantic_search.constants import extension_to_language, supported_extensions
+from devon_agent.semantic_search.constants import (extension_to_language, json_config_files,
+    supported_extensions)
 from devon_agent.semantic_search.constants import supported_noncode_extensions
     
 class GraphConstructor:
@@ -187,6 +188,7 @@ class GraphConstructor:
                 elif entry.is_file():
                     # Check file extension before processing
                     file_extension = os.path.splitext(entry.name)[len(os.path.splitext(entry.name)) - 1]
+                    file_name=os.path.basename(file_path)
 
                     if file_extension in self.supported_extentions:
                         try:
@@ -201,7 +203,7 @@ class GraphConstructor:
                             print(f"Skipping file {entry.path} due to encoding issues.")
                             continue
                        
-                    elif file_extension in self.supported_noncode_extensions:
+                    elif (file_extension != '.json' and file_extension in self.supported_noncode_extensions) or (file_extension == '.json' and file_extension in json_config_files):
                         with open(entry.path, 'r') as f:
                             content = f.read()
                             char_count = len(content)

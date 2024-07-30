@@ -1,7 +1,8 @@
 import os
 import re
 import pathspec
-from devon_agent.semantic_search.constants import supported_extensions
+from devon_agent.semantic_search.constants import (extension_to_language, json_config_files,
+    supported_extensions, supported_noncode_extensions)
 
 def regex_search(path, pattern, window=2):
     regex = re.compile(pattern)
@@ -79,7 +80,7 @@ def regex_search(path, pattern, window=2):
             for file in files:
                 file_path = os.path.join(root, file)
                 file_extension = os.path.splitext(file_path)[-1]
-                if file_extension in supported_extensions:
+                if file_extension in extension_to_language or (file_extension != '.json' and file_extension in supported_noncode_extensions) or (file_extension == '.json' and file_extension in json_config_files):
                     if not is_ignored(file_path, ignore_specs):
                         process_file(file_path)
     else:
@@ -89,7 +90,7 @@ def regex_search(path, pattern, window=2):
 
 if __name__ == "__main__":
     directory = "/Users/arnav/Desktop/devon/Devon"
-    pattern = r"AtomLoader"
+    pattern = r"electron-forge start"
     window = 5
     
     results = regex_search(directory, pattern, window)
