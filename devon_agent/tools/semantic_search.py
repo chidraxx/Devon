@@ -3,11 +3,13 @@ from devon_agent.semantic_search.code_graph_manager import CodeGraphManager
 from devon_agent.tool import Tool, ToolContext
 
 # import chromadb.utils.embedding_functions as embedding_functions
+import logging
 import os
 
 from devon_agent.tools.utils import encode_path
 from devon_agent.config import AgentConfig
 import time
+import traceback
 from typing import List, Any
 from pydantic import Field
 from litellm import APIConnectionError
@@ -32,23 +34,25 @@ class SemanticSearch(Tool):
 
     def setup(self, ctx):
         try:
-            # self.db_path = ctx["session"].config.db_path
-            # self.mapper = os.path.join(self.db_path, "project_mapper.json")
-            # self.storage_path = os.path.join(self.db_path, encode_path(ctx["session"].config.path, self.mapper))
-            # self.vectorDB_path = os.path.join(self.storage_path, "vectorDB")
-            # self.graph_path = os.path.join(self.storage_path, "graph")
-            # self.collection_name = "collection"
-            # print(self.vectorDB_path)
-            # print("storage_path", self.storage_path)
-
             self.db_path = ctx["config"].db_path
             self.mapper = os.path.join(self.db_path, "project_mapper.json")
-            self.storage_path = "/Users/arnav/Desktop/pytest/pytest"
+            self.storage_path = os.path.join(self.db_path, encode_path(ctx["config"].path, self.mapper))
             self.vectorDB_path = os.path.join(self.storage_path, "vectorDB")
             self.graph_path = os.path.join(self.storage_path, "graph")
             self.collection_name = "collection"
+
+            ctx["config"].logger.info(f"storage_path {self.storage_path}")
             # print(self.vectorDB_path)
-            print("storage_path", self.storage_path)
+            # print("storage_path", self.storage_path)
+
+            # self.db_path = ctx["config"].db_path
+            # self.mapper = os.path.join(self.db_path, "project_mapper.json")
+            # self.storage_path = "/Users/arnav/Desktop/pytest/pytest"
+            # self.vectorDB_path = os.path.join(self.storage_path, "vectorDB")
+            # self.graph_path = os.path.join(self.storage_path, "graph")
+            # self.collection_name = "collection"
+            # # print(self.vectorDB_path)
+            # print("storage_path", self.storage_path)
 
             
             api_key = os.getenv("ANTHROPIC_API_KEY")
@@ -67,7 +71,6 @@ class SemanticSearch(Tool):
 
 
             self.manager = CodeGraphManager(
-                ctx=ctx,
                 graph_storage_path=self.graph_path, 
                 db_path=self.vectorDB_path, 
                 root_path=ctx["config"].path, 
@@ -76,9 +79,12 @@ class SemanticSearch(Tool):
                 model_name="haiku", 
                 collection_name=self.collection_name
             )
-            # self.manager.create_graph(create_new=False)
+            print("here")
+            self.manager.create_graph(create_new=False)
+            print("aaaaa")
             
         except:
+            ctx["config"].logger.info(f"error in semantic search {traceback.print_exc()}")
             pass
         
     def cleanup(self, ctx):
@@ -134,9 +140,11 @@ class SemanticSearch(Tool):
         def query_with_retry(query_text):
             max_attempts = 3
             wait_time = 2  # in seconds
+            api_key = os.getenv("ANTHROPIC_API_KEY")
 
             for attempt in range(max_attempts):
                 try:
+                    self.manager.api_key = api_key
                     result = self.manager.query_and_run_agent(query_text)
                     return result
                 except APIConnectionError as e:

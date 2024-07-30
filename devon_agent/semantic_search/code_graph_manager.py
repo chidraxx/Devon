@@ -1,4 +1,3 @@
-import pathspec
 import uuid
 import chromadb
 import asyncio
@@ -12,13 +11,10 @@ from devon_agent.semantic_search.constants import extension_to_language
 import time
 from devon_agent.semantic_search.llm import model_cost
 from dotenv import load_dotenv
-from devon_agent.environments.shell_environment import LocalShellEnvironment
-from devon_agent.tools.utils import cwd_normalize_path, file_exists, make_abs_path
-from devon_agent.config import Config
 # from devon_agent.semantic_search.graph_construction.core.reranker import rerank_documents
 
 class CodeGraphManager:
-    def __init__(self, ctx, graph_storage_path, db_path, root_path, openai_api_key, api_key, model_name, collection_name):
+    def __init__(self, graph_storage_path, db_path, root_path, openai_api_key, api_key, model_name, collection_name):
         if not openai_api_key:
             raise ValueError("OpenAI API key is missing.")
         if not api_key:
@@ -27,7 +23,6 @@ class CodeGraphManager:
             raise ValueError("Unsupported model. Only 'haiku', 'gpt-4o-mini' and 'groq' are supported.")
         
         self.graph_storage_path = graph_storage_path
-        self.ctx = ctx
         self.db_path = db_path
         self.root_path = root_path
         self.openai_api_key = openai_api_key
@@ -42,85 +37,37 @@ class CodeGraphManager:
         self.languages = []
         self.ignore_dirs = []
         self.db_client = None
-        self.ignore_specs = self.load_gitignore_specs(self.root_path)
-
-    def normalize_path(self, path):
-        return cwd_normalize_path(self.ctx, path)
-
-    def load_gitignore_specs(self, root_path):
-        ignore_specs = []
-        for dirpath, dirnames, filenames in self.walk(root_path):
-            if '.gitignore' in filenames:
-                gitignore_path = os.path.join(dirpath, '.gitignore')
-                content, _ = self.ctx["environment"].execute(f"cat {gitignore_path}")
-                spec = pathspec.PathSpec.from_lines('gitwildmatch', content.splitlines())
-                ignore_specs.append((dirpath, spec))
-            
-            # Don't traverse into ignored directories
-            dirnames[:] = [d for d in dirnames if not self.is_ignored(os.path.join(dirpath, d), ignore_specs)]
-
-        # Sort ignore_specs so that root comes first, then by path length (descending)
-        ignore_specs.sort(key=lambda x: (x[0] != root_path, -len(x[0])))
-        return ignore_specs
-
-    def is_ignored(self, path, ignore_specs=None):
-        if ignore_specs is None:
-            ignore_specs = self.ignore_specs
-
-        path = make_abs_path(self.ctx, path)
         
-        for spec_path, spec in ignore_specs:
-            if path.startswith(spec_path):
-                # Get the path relative to the .gitignore file
-                relative_path = os.path.relpath(path, spec_path)
-                if spec.match_file(relative_path):
-                    return True
-        
-        return False
-
-    def walk(self, top):
-        try:
-            names, _ = self.ctx["environment"].execute(f"ls -1A {top}")
-            names = names.splitlines()
-        except Exception as e:
-            return
-
-        dirs, nondirs = [], []
-        for name in names:
-            full_path = os.path.join(top, name)
-            if self.is_directory(full_path):
-                dirs.append(name)
-            else:
-                nondirs.append(name)
-
-        yield top, dirs, nondirs
-
-        for name in dirs:
-            new_path = os.path.join(top, name)
-            yield from self.walk(new_path)
-
-    def is_directory(self, path):
-        out, rc = self.ctx["environment"].execute(f"test -d {path}")
-        return rc == 0
 
     def detect_languages(self):
         try:
             extensions = set()
+            ignored_paths = set()
 
-            def traverse_directory(path):
-                if not self.file_exists(path):
+            def traverse_directory(path, ignored_paths):
+                if not os.path.exists(path):
                     return
+                gitignore_path = os.path.join(path, ".gitignore")
+                if os.path.exists(gitignore_path):
+                    with open(gitignore_path, "r") as gitignore_file:
+                        for line in gitignore_file:
+                            line = line.strip()
+                            if line and not line.startswith("#"):
+                                normalized_path = os.path.normpath(line)
+                                absolute_path = os.path.abspath(os.path.join(path, normalized_path))
+                                ignored_paths.add(absolute_path)
 
-                for entry in self.walk(path):
-                    dirpath, dirnames, filenames = entry
-                    for filename in filenames:
-                        if filename.startswith(".") or self.is_ignored(os.path.join(dirpath, filename)):
-                            continue
-                        ext = os.path.splitext(filename)[1]
+                for entry in os.scandir(path):
+                    if entry.name.startswith(".") or os.path.abspath(entry.path) in ignored_paths:
+                        continue
+                    if entry.is_file():
+                        ext = os.path.splitext(entry.name)[1]
                         if ext:
                             extensions.add(ext)
+                    elif entry.is_dir():
+                        traverse_directory(entry.path, ignored_paths)
 
-            traverse_directory(self.root_path)
+            traverse_directory(self.root_path, ignored_paths)
             self.languages = list({extension_to_language.get(ext) for ext in extensions if extension_to_language.get(ext)})
             print("Detected languages:", self.languages)
         
@@ -128,25 +75,23 @@ class CodeGraphManager:
             print(f"An error occurred while detecting languages: {e}")
             raise
 
-    def file_exists(self, path):
-        return file_exists(self.ctx, path)
-
-    def create_graph(self, ctx, create_new=False, progress_tracker=None):
-        self.ctx = ctx
+    def create_graph(self, create_new = False, progress_tracker=None):
         if not self.root_path:
             raise ValueError("Root path is not provided")
 
         # Ensure the database path exists
-        if not self.directory_exists(self.db_path):
-            self.ctx["environment"].execute(f"mkdir -p {self.db_path}")
+        if not os.path.exists(self.db_path):
+            os.makedirs(self.db_path)
             print(f"Created database directory at {self.db_path}")
 
         # Initialize the database client
         if self.db_client is None:
             self.db_client = chromadb.PersistentClient(path=self.db_path)
 
-        graph_path = self.normalize_path(os.path.join(self.graph_storage_path, "graph.pickle"))
-        hash_path = self.normalize_path(os.path.join(self.graph_storage_path, "hashes.json"))
+        # self.detect_languages()
+
+        graph_path = os.path.join(self.graph_storage_path, f"graph.pickle")
+        hash_path = os.path.join(self.graph_storage_path, f"hashes.json")
 
         # Check if collection exists
         try:
@@ -155,11 +100,12 @@ class CodeGraphManager:
             print("Number of documents in collections: ", collection.count())
         except ValueError:
             print("Vector Collection not found")
+            # collection = self.db_client.create_collection(name=self.collection_name, embedding_function=self.openai_ef)
             collection_exists = False
 
         # Determine if we need to create a new graph or update the existing one
-        graph_exists = self.file_exists(graph_path)
-        hash_exists = self.file_exists(hash_path)
+        graph_exists = os.path.exists(graph_path)
+        hash_exists = os.path.exists(hash_path)
         create_new_graph = not collection_exists or not graph_exists or not hash_exists or create_new
 
         # If the collection exists but the graph or hash does not, clear the collection
@@ -167,10 +113,11 @@ class CodeGraphManager:
             print(f"Creating a new graph. Clearing all the entries in the collection.")
             self.db_client.delete_collection(name=self.collection_name)
             self.db_client.create_collection(name=self.collection_name, embedding_function=self.openai_ef)
+        
 
         # Initialize the graph constructor
         self.graph_constructor = GraphConstructor(
-            self.ctx,
+            # language,
             self.root_path,
             self.graph_storage_path,
             not create_new_graph,  # Pass False to create new graph if needed
@@ -178,9 +125,11 @@ class CodeGraphManager:
         )
 
         # Build or update the graph and get the actions list
-        actions, current_hashes = self.graph_constructor.build_or_update_graph(self.ctx)
+        actions, current_hashes = self.graph_constructor.build_or_update_graph()
 
         print(actions)
+
+
 
         # Generate documentation for the updated graph
         asyncio.run(generate_doc_level_wise(self.graph_constructor.graph, actions, api_key=self.api_key, model_name=self.model_name, progress_tracker=progress_tracker))
@@ -188,13 +137,19 @@ class CodeGraphManager:
         # Update the collection
         self.update_collection(actions)
 
+        
+
         # Save the updated graph and hashes
         self.graph_constructor.save_graph(graph_path)
         self.graph_constructor.save_hashes(hash_path, current_hashes)
 
-    def directory_exists(self, path):
-        out, rc = self.ctx["environment"].execute(f"test -d {path}")
-        return rc == 0
+        # collection = self.db_client.get_collection(name=self.collection_name, embedding_function=self.openai_ef)
+
+
+            # except ValueError as e:
+            #     print(f"Error: {e}. Language {language} is not supported.")
+            # except Exception as e:
+            #     print(f"An unexpected error occurred while building the graph for {language}: {e}")
 
     def estimate_cost(self):
         def find_node_id_by_file_path(dir_node_id, file_path):
@@ -525,7 +480,7 @@ class CodeGraphManager:
 
         try:
             # Ensure the database path exists
-            if not self.directory_exists(self.db_path):
+            if not os.path.exists(self.db_path):
                 raise ValueError(f"Database path '{self.db_path}' does not exist.")
 
             # Initialize the database client if it's not already initialized
@@ -638,44 +593,24 @@ if __name__ == "__main__":
 
     # try:
         # Initialize the CodeGraphManager
-
-        root_path = "/Users/arnav/Desktop/devon/Devon/devon_agent/tools"
+        root_path = "/Users/arnav/Desktop/pytest/pytest"
+        root_path = "/Users/arnav/Desktop/devon/Devon"
         
 
         graph_storage_path = os.path.join(root_path, "graph")
         db_path = os.path.join(root_path, "vectorDB")
 
         openai_api_key = os.getenv("OPENAI_API_KEY")
-        anthropic_api_key = ""
+        anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
         collection_name = "collection"
 
-        root_path = "/Users/arnav/Desktop/devon/Devon/devon_agent/tools"
-        env = LocalShellEnvironment(path = root_path)
-        env.setup()
-        ctx = {
-                "environment": env,
-                "config": Config(
-                    name="session",
-                    path=root_path,
-                    logger_name="LOGGER_NAME",
-                    db_path=db_path,
-                    persist_to_db=False,
-                    environments={"local": env},
-                    default_environment="local",
-                    checkpoints=[],
-                    agent_configs=[
-                    ],
-                    ignore_files=True,
-                    devon_ignore_file=".devonignore",
-                    state=None,
-                        )
-            }
-        
-        manager = CodeGraphManager(ctx, graph_storage_path, db_path, root_path, openai_api_key, openai_api_key, "gpt-4o-mini", collection_name)
-        manager.create_graph(ctx, create_new=True)
+        root_path = "/Users/arnav/Desktop/pytest/pytest"
+        root_path = "/Users/arnav/Desktop/devon/Devon"
+        manager = CodeGraphManager(graph_storage_path, db_path, root_path, openai_api_key, anthropic_api_key, "gpt-4o-mini", collection_name)
+        # manager.create_graph(create_new=False)
         # result = (manager.query_and_run_agent("how to create an integrate tools"))
         # # result = (manager.query_and_run_agent("Is the codebase using jupiter notebooks"))
-        # # result = (manager.query_and_run_agent("How to integrate a tools"))
+        # result = (manager.query_and_run_agent("How to integrate a tools"))
         # result = (manager.query_and_run_agent("how to create an agent environment for juipter notebook"))
         # result = (manager.query_and_run_agent("how do I update the tracking of the indexing process"))
         # result = (manager.query_and_run_agent("Show me the code for the is_rewrite_disabled method in the assertion rewrite mechanism of pytest."))

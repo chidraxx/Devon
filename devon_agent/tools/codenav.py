@@ -17,7 +17,7 @@ class RegexSearch(Tool):
 
     @property
     def name(self):
-        return "regex_search"
+        return "code_search"
 
     @property
     def supported_formats(self):
@@ -37,23 +37,23 @@ class RegexSearch(Tool):
                 return self.function.__doc__
             case "manpage":
                 return """
-    REGEX_SEARCH(1)                   General Commands Manual                  REGEX_SEARCH(1)
+    CODE_SEARCH(1)                   General Commands Manual                  CODE_SEARCH(1)
 
     NAME
-            regex_search - perform regex search within Python files in the project
+            code_search - perform regex search within Python files in the project
 
     SYNOPSIS
-            regex_search PATTERN [DIR_PATH]
+            code_search PATTERN [DIR_PATH]
 
     DESCRIPTION
-            The regex_search command performs a regex search for the specified pattern within all Python files in the project.
+            The code_search command performs a regex search for the specified pattern within all Python files in the project.
 
     OPTIONS
             PATTERN
                     The regex pattern to search for within the project files. This pattern follows Python's re module syntax.
             
             DIR_PATH
-                    The path of the directory whose content you want to search in.
+                    The path of the directory or file whose content you want to search in.
                     If not given, it will take the base path of the codebase
 
     RETURN VALUE
@@ -61,37 +61,37 @@ class RegexSearch(Tool):
 
     EXAMPLES
            1. Search for a specific function definition:
-               regex_search "def\\s+process_data\\s*\\(" 3
+               code_search "def\\s+process_data\\s*\\(" 3
 
             2. Search for a specific class definition:
-               regex_search "class\\s+UserProfile\\s*\\(" 2
+               code_search "class\\s+UserProfile\\s*\\(" 2
 
             3. Search for calls to a specific method on a particular object:
-               regex_search "request\\.user\\.is_authenticated\\s*\\(" 2
+               code_search "request\\.user\\.is_authenticated\\s*\\(" 2
 
             4. Search for imports from a specific module:
-               regex_search "from\\s+django\\.shortcuts\\s+import\\s+" 1
+               code_search "from\\s+django\\.shortcuts\\s+import\\s+" 1
 
             5. Search for assignments to a specific variable:
-               regex_search "^\\s*MAX_RETRIES\\s*=" 1
+               code_search "^\\s*MAX_RETRIES\\s*=" 1
 
             basically feel free to use the full potential of regex
 
     NOTE: When using the command line, you may need to escape backslashes and quotes according to your shell's rules. For example:
-          regex_search "def\\\\s+[a-zA-Z_][a-zA-Z0-9_]*\\\\s*\\\\(" 3
+          code_search "def\\\\s+[a-zA-Z_][a-zA-Z0-9_]*\\\\s*\\\\(" 3
     """
             case _:
                 raise ValueError(f"Invalid format: {format}")
 
     def function(self, ctx: ToolContext, pattern: str, dir_path: str | None = None) -> str:
         """
-        command_name: regex_search
-        description: Performs a regex search in Python files. Accepts a regex pattern and an optional directory path. Returns matches with context as a string. Uses Python's re syntax. Useful for finding functions, classes, or specific code patterns.
-        signature: regex_search PATTERN [DIR_PATH]
-        example: `regex_search "def process_data\\s*\\(" /path/to/project`
+        command_name: code_search
+        description: Performs a regex search in Python files. Accepts a regex pattern and an optional directory or file path. Returns matches with context as a string. Uses Python's re syntax. Useful for finding functions, classes, or specific code patterns.
+        signature: code_search PATTERN [DIR_PATH]
+        example: `code_search "def process_data\\s*\\(" /path/to/project`
         """
         try:
-            window = 10
+            window = 1
             path = None
             if dir_path is None:
                 path = self.base_path  
@@ -99,13 +99,26 @@ class RegexSearch(Tool):
                 path = cwd_normalize_path(ctx, dir_path)
 
             results = regex_search(path, pattern, window)
-
             num_matches = len(results)
 
             if num_matches == 0:
                 return f'No matches found for "{pattern}" in {path}'
-            elif num_matches > 25:
-                return f'More than 50 lines matched for "{pattern}" in {path}. Please narrow your search.'
+            elif num_matches < 10:
+                window = 20
+                results = regex_search(path, pattern, window)
+
+            elif num_matches < 20:
+                window = 10
+                results = regex_search(path, pattern, window)
+                results = results
+
+            elif num_matches < 50:
+                window = 5
+                results = regex_search(path, pattern, window)
+                results = results
+                
+            elif num_matches > 50:
+                return f'More than 50 lines matched for "{pattern}" in {path}. Please narrow your search either though your regex pattern or through limitting it to a smaller directory or file.'
 
             output = ""
             

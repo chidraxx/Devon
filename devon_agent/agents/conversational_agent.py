@@ -1,3 +1,4 @@
+import devon_swe_bench_experimental.environment.prompt
 import logging
 import time
 import traceback
@@ -20,7 +21,7 @@ from devon_agent.tools import parse_command
 from devon_agent.tools.utils import get_cwd
 from devon_agent.utils.config_utils import make_checkpoint
 from devon_agent.utils.utils import LOGGER_NAME, Hallucination
-from devon_agent.tools.retrieval.file_tree.file_tree_tool import FileTreeTool
+from devon_agent.tools.retrieval.file_tree.file_tree_tool_without_env import FileTreeTool
 # from devon_agent.session import Session
 
 if TYPE_CHECKING:
@@ -110,12 +111,12 @@ class ConversationalAgent(Agent):
         )
     
     def _prepare_file_tree(self, base_path):
-        # result_list, result_tree= FileTreeTool(root_dir=base_path).get_large_tree(base_path, 500, 20)
+        result_list, result_tree= FileTreeTool(root_dir=base_path).get_large_tree(base_path, 500, 20)
 
         return f"""
 <FileTree>
 The following is the file tree of the codebase
-{'result_tree'}
+{result_tree}
 </FileTree>
 """
     
@@ -129,8 +130,10 @@ The following is the file tree of the codebase
         )
 
         history = anthropic_history_to_bash_history(self.agent_config.chat_history)
-        system_prompt = swe_bench_anthropic_system_prompt_template_v3(command_docs)
-        last_user_prompt = swe_bench_anthropic_user_prompt_template_v3(
+        system_prompt = conversational_agent_system_prompt_template_v3(command_docs)
+        print("path", session.config.path)
+        history_with_file_tree = self._prepare_file_tree(session.config.path) + history
+        last_user_prompt = conversational_agent_last_user_prompt_template_v3(
             history,
             editor,
             get_cwd(

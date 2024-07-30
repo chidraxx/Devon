@@ -3,12 +3,9 @@ import hashlib
 import json
 import os
 import tiktoken
-from typing import List, Tuple, Dict
 import uuid
 import pickle
 import pathspec
-from devon_agent.tools.utils import (cwd_normalize_path, file_exists, read_binary_file, read_file,
-    write_binary_file, write_file, write_file_tool)
 
 import networkx as nx
 from devon_agent.semantic_search.graph_construction.utils import format_nodes
@@ -20,58 +17,54 @@ from devon_agent.semantic_search.graph_construction.languages.java.java_parser i
 from devon_agent.semantic_search.graph_construction.languages.cpp.cpp_parser import CPPParser
 from devon_agent.semantic_search.graph_construction.languages.go.go_parser import GoParser
 from devon_agent.semantic_search.graph_construction.core.base_parser import BaseParser
-from devon_agent.semantic_search.constants import extension_to_language, json_config_files
+from devon_agent.semantic_search.constants import extension_to_language
 from devon_agent.semantic_search.constants import supported_noncode_extensions
-from devon_agent.tools.utils import cwd_normalize_path, file_exists, make_abs_path
-from devon_agent.tool import ToolContext
-
     
 class GraphConstructor:
-    def __init__(self, ctx: ToolContext, root_path: str, graph_storage_path: str, update: bool, ignore_dirs: List[str] = None):
-        self.ctx = ctx
-        self.root_path = self.normalize_path(root_path)
-        self.graph_storage_path = self.normalize_path(graph_storage_path)
-        self.graph_path = self.normalize_path(os.path.join(self.graph_storage_path, "graph.pickle"))
-        self.hash_path = self.normalize_path(os.path.join(self.graph_storage_path, "hashes.json"))
-        self.ignore_dirs = [self.normalize_path(d) for d in (ignore_dirs or [])]
-        self.ignore_specs = self.load_gitignore_specs(self.root_path)
+    def __init__(self, root_path, graph_storage_path, update, ignore_dirs=None):
+        # self.language = language
+        self.root_path = root_path
+        self.graph_storage_path = graph_storage_path
+        self.graph_path = os.path.join(self.graph_storage_path, f"graph.pickle")
+        self.hash_path = os.path.join(self.graph_storage_path, f"hashes.json")
+        self.ignore_dirs = ignore_dirs if ignore_dirs else []
+        self.ignore_specs = self.load_gitignore_specs(root_path)
 
-        self.supported_extensions = ['.py', '.js', '.jsx', '.ts', '.tsx', '.java', '.cpp', '.cxx', '.cc', '.hpp', '.h', '.go']
-        self.supported_noncode_extensions = supported_noncode_extensions  # Assuming this is defined elsewhere
+        self.supported_extentions = ['.py', '.js', '.jsx', '.ts', '.tsx', '.java', '.cpp', '.cxx', '.cc', '.hpp', '.h', '.go']
+        self.supported_noncode_extensions = supported_noncode_extensions
+        self.parser : BaseParser = None
 
-        self.parser = None  # Initialize parser as needed
+        # # Choose the appropriate parser based on the language
+        # if language == "python":
+        #     self.parser = PythonParser()
+        # # Add more language parsers as needed
+        # else:
+        #     raise ValueError(f"Language {language} is not supported.")
 
-        if not self.directory_exists(self.graph_storage_path):
-            self.ctx["environment"].execute(f"mkdir -p {self.graph_storage_path}")
+        if not os.path.exists(graph_storage_path):
+            os.makedirs(graph_storage_path)
 
-        if not (update and self.file_exists(self.graph_path) and self.file_exists(self.hash_path)):
-            print("Creating new graphs and hashes")
+        if not (update and os.path.exists(self.graph_path) and os.path.exists(self.hash_path)):
+            print("creating new graphs and hashes")
             self.graph = nx.DiGraph()
             self.hashes = {}
+
         else:
-            print("Loading existing graphs and hashes")
+            print("loading existing graphs and hashes")
             self.load_graph(self.graph_path)
             self.hashes = self.load_hashes(self.hash_path)
             print("Number of nodes in graph", len(self.graph.nodes))
 
-    def normalize_path(self, path: str) -> str:
-        return cwd_normalize_path(self.ctx, path)
 
-    def file_exists(self, path: str) -> bool:
-        return file_exists(self.ctx, path)
-
-    def directory_exists(self, path: str) -> bool:
-        out, rc = self.ctx["environment"].execute(f"test -d {path}")
-        return rc == 0
-
-    def load_gitignore_specs(self, root_path: str) -> List[Tuple[str, pathspec.PathSpec]]:
+    def load_gitignore_specs(self, root_path):
         ignore_specs = []
-        for dirpath, dirnames, filenames in self.walk(root_path):
+        for dirpath, dirnames, filenames in os.walk(root_path, topdown=True):
             if '.gitignore' in filenames:
                 gitignore_path = os.path.join(dirpath, '.gitignore')
-                content, _ = self.ctx["environment"].execute(f"cat {gitignore_path}")
-                spec = pathspec.PathSpec.from_lines('gitwildmatch', content.splitlines())
-                ignore_specs.append((dirpath, spec))
+                with open(gitignore_path, 'r') as gitignore_file:
+                    spec = pathspec.PathSpec.from_lines('gitwildmatch', gitignore_file)
+                    # Store the spec with its absolute path
+                    ignore_specs.append((dirpath, spec))
             
             # Don't traverse into ignored directories
             dirnames[:] = [d for d in dirnames if not self.is_ignored(os.path.join(dirpath, d), ignore_specs)]
@@ -80,11 +73,11 @@ class GraphConstructor:
         ignore_specs.sort(key=lambda x: (x[0] != root_path, -len(x[0])))
         return ignore_specs
 
-    def is_ignored(self, path: str, ignore_specs: List[Tuple[str, pathspec.PathSpec]] = None) -> bool:
+    def is_ignored(self, path, ignore_specs=None):
         if ignore_specs is None:
             ignore_specs = self.ignore_specs
 
-        path = make_abs_path(self.ctx, path)
+        path = os.path.abspath(path)
         
         for spec_path, spec in ignore_specs:
             if path.startswith(spec_path):
@@ -94,27 +87,6 @@ class GraphConstructor:
                     return True
         
         return False
-
-    def walk(self, top: str):
-        try:
-            names, _ = self.ctx["environment"].execute(f"ls -1A {top}")
-            names = names.splitlines()
-        except Exception as e:
-            return
-
-        dirs, nondirs = [], []
-        for name in names:
-            full_path = os.path.join(top, name)
-            if self.directory_exists(full_path):
-                dirs.append(name)
-            else:
-                nondirs.append(name)
-
-        yield top, dirs, nondirs
-
-        for name in dirs:
-            new_path = os.path.join(top, name)
-            yield from self.walk(new_path)
 
 
 
@@ -144,39 +116,23 @@ class GraphConstructor:
 
 
     def load_graph(self, graph_path):
-        try:
-            binary_content = read_binary_file(self.ctx, graph_path)
-            self.graph = pickle.loads(binary_content)
-        except Exception as e:
-            self.ctx["config"].logger.error(f"Failed to load graph from {graph_path}. Error: {str(e)}")
-            raise
+        with open(graph_path, 'rb') as f:
+            self.graph = pickle.load(f)
 
     def load_hashes(self, hash_path):
-        try:
-            if file_exists(self.ctx, hash_path):
-                content = read_file(self.ctx, hash_path)
-                return json.loads(content)
-            return {}
-        except Exception as e:
-            self.ctx["config"].logger.error(f"Failed to load hashes from {hash_path}. Error: {str(e)}")
-            raise
+        if os.path.exists(hash_path):
+            with open(hash_path, 'r') as f:
+                return json.load(f)
+        return {}
 
     def save_graph(self, graph_path):
-        try:
-            binary_content = pickle.dumps(self.graph)
-            write_binary_file(self.ctx, graph_path, binary_content)
-        except Exception as e:
-            self.ctx["config"].logger.error(f"Failed to save graph to {graph_path}. Error: {str(e)}")
-            raise
+        with open(graph_path, 'wb') as f:
+            pickle.dump(self.graph, f)
 
     def save_hashes(self, hash_path, hashes):
-        try:
-            self.hashes = hashes
-            json_content = json.dumps(hashes)
-            write_file_tool(self.ctx, hash_path, json_content)
-        except Exception as e:
-            self.ctx["config"].logger.error(f"Failed to save hashes to {hash_path}. Error: {str(e)}")
-            raise
+        self.hashes = hashes
+        with open(hash_path, 'w') as f:
+            json.dump(hashes, f)
 
 
     def compute_file_hash(self, file_path):
@@ -193,47 +149,71 @@ class GraphConstructor:
         ignored_paths = set()
         visited_nodes = set()
 
+        # def read_gitignore(path):
+        #     gitignore_path = os.path.join(path, ".gitignore")
+        #     if os.path.exists(gitignore_path):
+        #         with open(gitignore_path, "r") as gitignore_file:
+        #             for line in gitignore_file:
+        #                 line = line.strip()
+        #                 if line and not line.startswith("#"):
+        #                     if line.startswith("/"):
+        #                         normalized_path = os.path.normpath(line[1:])
+        #                         absolute_path = os.path.abspath(os.path.join(path, normalized_path))
+        #                     else:
+        #                         normalized_path = os.path.normpath(line)
+        #                         absolute_path = os.path.abspath(os.path.join(path, normalized_path))
+        #                     ignored_paths.add(absolute_path)
+
         def traverse_directory(dir_path, parent_node_id):
+            # read_gitignore(dir_path)
+            
             # Get the children of the current directory node in the graph
             children_in_graph = {
-                self.normalize_path(self.graph.nodes[child]['path']): child
+                os.path.normpath(self.graph.nodes[child]['path']): child
                 for child in list(self.graph.successors(parent_node_id))
                 if 'path' in self.graph.nodes[child]
             }
 
             dirs, files = [], []
             
-            ls_output, _ = self.ctx["environment"].execute(f"ls -1a {dir_path}")
-            entries = ls_output.splitlines()
+            for entry in os.scandir(dir_path):
+                abs_path = entry.path  # This is already an absolute path
 
-            for entry in entries:
-                abs_path = self.normalize_path(os.path.join(dir_path, entry))
-
-                if self.is_ignored(abs_path) or entry.startswith("."):
+                if self.is_ignored(abs_path) or entry.name.startswith("."):
                     continue
                 
-                if self.directory_exists(abs_path) and entry not in self.ignore_dirs:
-                    dirs.append(abs_path)
-                elif self.file_exists(abs_path):
-                    file_extension = os.path.splitext(entry)[1]
+                if entry.is_dir() and entry.name not in self.ignore_dirs:
+                    dirs.append(entry.path)
+                elif entry.is_file():
+                    # Check file extension before processing
+                    file_extension = os.path.splitext(entry.name)[len(os.path.splitext(entry.name)) - 1]
 
-                    if file_extension in self.supported_extensions:
-                        content, _ = self.ctx["environment"].execute(f"cat {abs_path}")
-                        char_count = len(content)
+                    if file_extension in self.supported_extentions:
+                        try:
+                            with open(entry.path, 'r', encoding='utf-8') as f:
+                                content = f.read()
+                                char_count = len(content)
+                                
+                                if char_count <= 350000:
+                                    files.append(entry.path)
                         
-                        if char_count <= 350000:
-                            files.append(abs_path)
-                    
+                        except UnicodeDecodeError:
+                            print(f"Skipping file {entry.path} due to encoding issues.")
+                            continue
+                       
                     elif file_extension in self.supported_noncode_extensions:
-                        content, _ = self.ctx["environment"].execute(f"cat {abs_path}")
-                        char_count = len(content)
-                        
-                        if char_count <= 70000:
-                            files.append(abs_path)
+                        with open(entry.path, 'r') as f:
+                            content = f.read()
+                            char_count = len(content)
+                            
+                            if char_count <= 70000:
+                                files.append(entry.path)
             
             # Process directories
             for sub_dir in dirs:
-                if sub_dir not in children_in_graph:
+                # print(sub_dir)
+
+                if sub_dir not in children_in_graph.keys():
                     # Create the directory node if it doesn't exist in the graph
                     sub_dir_node_id = self.create_dir(sub_dir, parent_node_id)
                     visited_nodes.add(sub_dir_node_id)
@@ -262,13 +242,18 @@ class GraphConstructor:
             # Handle deletions
             for child_path, node_id in children_in_graph.items():
                 if child_path not in current_hashes and node_id not in visited_nodes:
-                    if not self.directory_exists(child_path):
+                    if not os.path.isdir(child_path):
                         self.delete_file_or_dir(node_id, actions)
                     else:
                         actions["delete"].append((child_path, parent_node_id))
+                    
 
         root_node_id = self.graph.graph.get('root_id')
-
+        # children_in_graph = {
+        #     self.graph.nodes[child]['path']: child
+        #     for child in list(self.graph.successors(root_node_id))
+        #     if 'path' in self.graph.nodes[child]
+        # }
         # Find or create the root directory node
         if root_node_id is None:
             for node_id, data in self.graph.nodes(data=True):
@@ -315,9 +300,7 @@ class GraphConstructor:
 
         return directory_node_id
 
-    def build_or_update_graph(self, ctx : ToolContext):
-        self.ctx = ctx
-        self.ignore_specs = self.load_gitignore_specs(self.root_path)
+    def build_or_update_graph(self):
         actions, current_hashes = self.detect_changes()
         
         for file in actions["add"]:
@@ -347,10 +330,9 @@ class GraphConstructor:
     def parse_file_and_update_graph(self, parent_id_and_file_path):
         parent_id = parent_id_and_file_path[1]
         file_path = parent_id_and_file_path[0]
-        file_name = os.path.basename(file_path)
         file_extension = os.path.splitext(file_path)[len(os.path.splitext(file_path)) - 1]
         try:
-            if (file_extension == ".json" and file_name in json_config_files) or (file_extension != ".json" and file_extension in self.supported_noncode_extensions):
+            if file_extension in self.supported_noncode_extensions:
                 # return
                 node= {}
                 node["file_path"] = file_path

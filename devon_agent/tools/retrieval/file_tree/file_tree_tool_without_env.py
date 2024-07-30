@@ -1,4 +1,5 @@
 import os
+import pathspec
 import xml.etree.ElementTree as ET
 
 import yaml
@@ -7,13 +8,45 @@ import yaml
 class FileTreeTool:
     def __init__(self, root_dir, ignore_dir=[]):
         self.root_dir = os.path.abspath(os.path.normpath(root_dir))
-        self.ignore_dir = set(os.path.abspath(os.path.normpath(d)) for d in ignore_dir)
+        # self.ignore_dir = set(os.path.abspath(os.path.normpath(d)) for d in ignore_dir)
         self.file_tree = {}
-        self.parse_gitignore(self.root_dir, self.ignore_dir)
+        self.ignore_specs = self.load_gitignore_specs(self.root_dir)
+
+    def load_gitignore_specs(self, root_path):
+        ignore_specs = []
+        for dirpath, dirnames, filenames in os.walk(root_path, topdown=True):
+            if '.gitignore' in filenames:
+                gitignore_path = os.path.join(dirpath, '.gitignore')
+                with open(gitignore_path, 'r') as gitignore_file:
+                    spec = pathspec.PathSpec.from_lines('gitwildmatch', gitignore_file)
+                    ignore_specs.append((dirpath, spec))
+            
+            # Don't traverse into ignored directories
+            dirnames[:] = [d for d in dirnames if not self.is_ignored(os.path.join(dirpath, d), ignore_specs)]
+
+        # Sort ignore_specs so that root comes first, then by path length (descending)
+        ignore_specs.sort(key=lambda x: (x[0] != root_path, -len(x[0])))
+        return ignore_specs
+
+    def is_ignored(self, path, ignore_specs=None):
+        if ignore_specs is None:
+            ignore_specs = self.ignore_specs
+
+        path = os.path.abspath(path)
+        
+        for spec_path, spec in ignore_specs:
+            if path.startswith(spec_path):
+                # Get the path relative to the .gitignore file
+                relative_path = os.path.relpath(path, spec_path)
+                if spec.match_file(relative_path):
+                    return True
+        
+        return False
 
     def get_tree_json(self, start_path=None):
         try:
-            self.file_tree = self.get_file_tree_json(self.root_dir, self.ignore_dir)
+            self.ignore_specs = self.load_gitignore_specs(self.root_dir)
+            self.file_tree = self.get_file_tree_json(self.root_dir)
 
             if start_path is None:
                 start_path = self.root_dir
@@ -22,7 +55,7 @@ class FileTreeTool:
             if not os.path.exists(abs_start_path):
                 return f"Error: The directory {abs_start_path} does not exist."
 
-            self.file_tree = self.get_file_tree_json(abs_start_path, self.ignore_dir)
+            self.file_tree = self.get_file_tree_json(abs_start_path)
             return self.file_tree
 
         except Exception as e:
@@ -30,11 +63,10 @@ class FileTreeTool:
 
     def get_current_tree_if_count_less_than(self, start_path, max_count):
         try:
-            self.parse_gitignore(self.root_dir, self.ignore_dir)
             abs_start_path = os.path.abspath(os.path.normpath(start_path))
             if not os.path.exists(abs_start_path):
                 return f"Error: The directory {abs_start_path} does not exist."
-            self.file_tree = self.get_file_tree_json(abs_start_path, self.ignore_dir)
+            self.file_tree = self.get_file_tree_json(abs_start_path)
             if self.file_tree["file_count"] <= max_count:
                 return self.json_to_yaml(self.file_tree, self.root_dir)
             else:
@@ -64,25 +96,10 @@ class FileTreeTool:
 
         except Exception as e:
             return f"Error generating file tree for {start_path}: {str(e)}"
+        
 
-    @staticmethod
-    def parse_gitignore(path, ignore_dir):
-        try:
-            gitignore_path = os.path.join(path, ".gitignore")
-            if os.path.exists(gitignore_path):
-                with open(gitignore_path, "r") as file:
-                    for line in file:
-                        line = line.strip()
-                        if line and not line.startswith("#"):
-                            ignore_path = os.path.abspath(
-                                os.path.normpath(os.path.join(path, line))
-                            )
-                            ignore_dir.add(ignore_path)
-        except Exception as e:
-            raise RuntimeError(f"Error parsing .gitignore file: {str(e)}")
-
-    @staticmethod
-    def get_file_tree_json(start_path, ignore_dir):
+    
+    def get_file_tree_json(self, start_path):
         # Helper function to create a node in the directory structure
         def create_node(name, node_type, abs_path, rel_path):
             if node_type == "file":
@@ -101,16 +118,12 @@ class FileTreeTool:
                 }
 
         # Recursive function to build the directory structure
-        def build_structure(current_path, ignore_dir, rel_path):
-            FileTreeTool.parse_gitignore(
-                current_path, ignore_dir
-            )  # Parse .gitignore in the current directory
+        def build_structure(current_path, rel_path):
             current_node = create_node(
                 os.path.basename(current_path), "directory", current_path, rel_path
             )
             try:
                 dir_entries = os.listdir(current_path)
-                print(dir_entries)
             except PermissionError:
                 return current_node
             except Exception as e:
@@ -124,11 +137,11 @@ class FileTreeTool:
                 entry_rel_path = os.path.join(rel_path, entry)
                 if (
                     entry.startswith(".") and os.path.isdir(entry_abs_path)
-                ) or os.path.abspath(entry_abs_path) in ignore_dir:
+                ) or self.is_ignored(entry_abs_path):
                     continue
                 if os.path.isdir(entry_abs_path):
                     child_node = build_structure(
-                        entry_abs_path, ignore_dir, entry_rel_path
+                        entry_abs_path, entry_rel_path
                     )
                     current_node["children"].append(child_node)
                     file_count += (
@@ -153,7 +166,7 @@ class FileTreeTool:
         start_path = os.path.normpath(start_path)
 
         # Build the directory structure recursively
-        root_structure = build_structure(start_path, ignore_dir, "")
+        root_structure = build_structure(start_path, "")
 
         return root_structure
 
