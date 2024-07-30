@@ -300,7 +300,7 @@ class GraphConstructor:
 
         return directory_node_id
 
-    def build_or_update_graph(self):
+    def build_or_update_graph(self, ctx = None):
         actions, current_hashes = self.detect_changes()
         
         for file in actions["add"]:

@@ -75,7 +75,7 @@ class CodeGraphManager:
             print(f"An error occurred while detecting languages: {e}")
             raise
 
-    def create_graph(self, create_new = False, progress_tracker=None):
+    def create_graph(self, create_new = False, progress_tracker=None, ctx = None):
         if not self.root_path:
             raise ValueError("Root path is not provided")
 
@@ -125,14 +125,14 @@ class CodeGraphManager:
         )
 
         # Build or update the graph and get the actions list
-        actions, current_hashes = self.graph_constructor.build_or_update_graph()
+        actions, current_hashes = self.graph_constructor.build_or_update_graph(ctx = ctx)
 
         print(actions)
 
 
 
         # Generate documentation for the updated graph
-        asyncio.run(generate_doc_level_wise(self.graph_constructor.graph, actions, api_key=self.api_key, model_name=self.model_name, progress_tracker=progress_tracker))
+        asyncio.run(generate_doc_level_wise(self.graph_constructor.graph, actions, api_key=self.api_key, model_name=self.model_name, progress_tracker=progress_tracker, ctx = ctx))
 
         # Update the collection
         self.update_collection(actions)
@@ -171,7 +171,7 @@ class CodeGraphManager:
             ignore_dirs=["__pycache__"]
         )
 
-        actions, current_hashes = self.graph_constructor.build_or_update_graph()
+        actions, current_hashes = self.graph_constructor.build_or_update_graph(ctx = ctx)
 
         all_collected_node_ids = set()
 

@@ -75,12 +75,15 @@ class SemanticSearch(Tool):
                 db_path=self.vectorDB_path, 
                 root_path=ctx["config"].path, 
                 openai_api_key=openai_api_key, 
-                api_key=api_key, 
-                model_name="haiku", 
+                api_key=openai_api_key, 
+                model_name="gpt-4o-mini", 
                 collection_name=self.collection_name
             )
             print("here")
-            self.manager.create_graph(create_new=False)
+            def progress_tracker(val):
+                ctx["config"].logger.info(f"progress {val}")
+
+            self.manager.create_graph(create_new=False, progress_tracker=progress_tracker)
             print("aaaaa")
             
         except:

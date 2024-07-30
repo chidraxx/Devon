@@ -132,7 +132,7 @@ async def process_level_async(graph, nodes, level, batch_size, model_name, api_k
 
 
 
-async def generate_doc_level_wise(graph, actions, api_key, model_name="groq", edge_types=["FUNCTION_DEFINITION", "CLASS_DEFINITION", "CONTAINS", "INTERFACE_DECLARATION", "METHOD_DEFINITION", "UNKNOWN"], batch_size=50, minimum_batch=4, progress_tracker=None):
+async def generate_doc_level_wise(graph, actions, api_key, model_name="groq", edge_types=["FUNCTION_DEFINITION", "CLASS_DEFINITION", "CONTAINS", "INTERFACE_DECLARATION", "METHOD_DEFINITION", "UNKNOWN"], batch_size=50, minimum_batch=4, progress_tracker=None, ctx = None):
     files_to_process = actions["add"] + actions["update"]
     file_file_paths = list(map(lambda x: x[0], files_to_process))
 

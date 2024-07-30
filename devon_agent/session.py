@@ -1217,7 +1217,7 @@ class Session:
                 tool.setup(
                     {
                         "environment": env,
-                        "session": self,
+                        "config": self.config,
                         "state": self.config.state,
                     }
                 )
