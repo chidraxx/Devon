@@ -26,6 +26,8 @@ extension_to_language = {
 
 supported_noncode_extensions = [".md", ".json", ".sh", ".cargo", ".toml", ".config", ".yaml", ".yml", ".properties", "Dockerfile", ".dockerignore"]
 
+supported_extensions = ['.py', '.js', '.jsx', '.ts', '.tsx', '.java', '.cpp', '.cxx', '.cc', '.hpp', '.h', '.go']
+
 json_config_files = [
     "package.json",
     "composer.json",

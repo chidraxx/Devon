@@ -1,6 +1,7 @@
 import os
 import re
 import pathspec
+from devon_agent.semantic_search.constants import supported_extensions
 
 def regex_search(path, pattern, window=2):
     regex = re.compile(pattern)
@@ -76,8 +77,9 @@ def regex_search(path, pattern, window=2):
             dirs[:] = [d for d in dirs if not is_ignored(os.path.join(root, d), ignore_specs)]
             
             for file in files:
-                if file.endswith('.py'):
-                    file_path = os.path.join(root, file)
+                file_path = os.path.join(root, file)
+                file_extension = os.path.splitext(file_path)[-1]
+                if file_extension in supported_extensions:
                     if not is_ignored(file_path, ignore_specs):
                         process_file(file_path)
     else:
@@ -87,7 +89,7 @@ def regex_search(path, pattern, window=2):
 
 if __name__ == "__main__":
     directory = "/Users/arnav/Desktop/devon/Devon"
-    pattern = r"regex_search"
+    pattern = r"AtomLoader"
     window = 5
     
     results = regex_search(directory, pattern, window)

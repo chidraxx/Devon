@@ -17,7 +17,7 @@ from devon_agent.semantic_search.graph_construction.languages.java.java_parser i
 from devon_agent.semantic_search.graph_construction.languages.cpp.cpp_parser import CPPParser
 from devon_agent.semantic_search.graph_construction.languages.go.go_parser import GoParser
 from devon_agent.semantic_search.graph_construction.core.base_parser import BaseParser
-from devon_agent.semantic_search.constants import extension_to_language
+from devon_agent.semantic_search.constants import extension_to_language, supported_extensions
 from devon_agent.semantic_search.constants import supported_noncode_extensions
     
 class GraphConstructor:
@@ -30,7 +30,7 @@ class GraphConstructor:
         self.ignore_dirs = ignore_dirs if ignore_dirs else []
         self.ignore_specs = self.load_gitignore_specs(root_path)
 
-        self.supported_extentions = ['.py', '.js', '.jsx', '.ts', '.tsx', '.java', '.cpp', '.cxx', '.cc', '.hpp', '.h', '.go']
+        self.supported_extentions = supported_extensions
         self.supported_noncode_extensions = supported_noncode_extensions
         self.parser : BaseParser = None
 
