@@ -3,6 +3,8 @@ import pathspec
 import xml.etree.ElementTree as ET
 
 import yaml
+from devon_agent.semantic_search.constants import (extension_to_language, json_config_files,
+    supported_noncode_extensions)
 
 
 class FileTreeTool:
@@ -40,6 +42,16 @@ class FileTreeTool:
                 relative_path = os.path.relpath(path, spec_path)
                 if spec.match_file(relative_path):
                     return True
+                
+        if os.path.isfile(path):
+            file_extension = os.path.splitext(path)[1].lower()
+            file_name = os.path.basename(path)
+
+            # Check if the file should be processed based on its extension
+            if not (file_extension in extension_to_language or 
+                    (file_extension != '.json' and file_extension in supported_noncode_extensions) or 
+                    (file_extension == '.json' and file_name in json_config_files)):
+                return True 
         
         return False
 
