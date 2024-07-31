@@ -95,6 +95,15 @@ def git_ask_user_for_action(message: str, event_log: List[Dict], event_type: str
             return event_log[-1]
         time.sleep(1)
 
+def parse_agent_system_prompt(ctx, response: str):
+    print(f"RESPONSE: {response}")
+    agent_prompt = ""
+    if "<AGENT>" in response and "</AGENT>" in response:
+        agent_prompt = response.split("<AGENT>")[1].split("</AGENT>")[0].strip()
+    
+        # Set the agent_system_prompt in the session's agent
+        ctx["config"].agent_configs[0].agent_system_prompt = agent_prompt
+    return response
 
 class Session:
     def __init__(self, config: Config, event_log: List[Dict]):
@@ -148,7 +157,7 @@ class Session:
         self.environments["local"].event_log = event_log
         self.environments["user"].event_log = event_log
 
-        self.environments["user"].register_tools({"ask_user": AskUserToolWithCommit()})
+        self.environments["user"].register_tools({"ask_user": AskUserToolWithCommit().register_post_hook(parse_agent_system_prompt)})
         if self.config.versioning_type == "git":
             self.versioning = GitVersioning(config.path, config)
 
