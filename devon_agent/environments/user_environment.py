@@ -1,3 +1,4 @@
+import re
 import time
 from typing import TYPE_CHECKING, Callable
 
@@ -32,10 +33,15 @@ class UserEnvironment(EnvironmentModule):
         print("added user request",self.event_log[-1],len(self.event_log))
 
         response = self.user_func()
+        # remove <AGENT> ... </AGENT>
+        pattern = r'<AGENT>.*?</AGENT>'
+        # Use re.sub() to replace the pattern with an empty string
+        cleaned_text = re.sub(pattern, '', response, flags=re.DOTALL)
+
         self.event_log.append(
             {
                 "type": "UserResponse",
-                "content": response,
+                "content": cleaned_text,
                 "producer": self.name,
                 "consumer": "tool",
             }
