@@ -187,8 +187,8 @@ class GraphConstructor:
                     dirs.append(entry.path)
                 elif entry.is_file():
                     # Check file extension before processing
+                    file_path = entry.path
                     file_extension = os.path.splitext(entry.name)[len(os.path.splitext(entry.name)) - 1]
-                    file_name=os.path.basename(file_path)
 
                     if file_extension in self.supported_extentions:
                         try:
