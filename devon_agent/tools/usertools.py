@@ -1,7 +1,12 @@
+import json
 import time
 from typing import Dict, List
 from devon_agent.config import Checkpoint
+from devon_agent.environment import EnvironmentModule
 from devon_agent.tool import Tool, ToolContext
+import xml.etree.ElementTree as ET
+
+from devon_agent.tools.utils import cwd_normalize_path, read_file
 
 
 def waitForEvent(event_log: List[Dict], event):
@@ -60,8 +65,6 @@ class AskUserTool(Tool):
         """
         return context["environment"].execute(input=question)
 
-
-
 class AskUserToolWithCommit(Tool):
     @property
     def name(self):
@@ -113,7 +116,127 @@ class AskUserToolWithCommit(Tool):
         return context["environment"].execute(input=question)
 
 
+def parse_xml_tags_to_xml(start_tag, end_tag, xml_string):
+    start_index = xml_string.rfind(start_tag)
+    end_index = xml_string.rfind(end_tag)
 
+    if start_index != -1 and end_index != -1:
+        xml_string = xml_string[start_index:end_index + len(end_tag)]
+    else:
+        return "Error: Invalid XML structure. Missing graph_commands tags."
+
+    # Clean the string
+    xml_string = ''.join(char for char in xml_string if ord(char) >= 32)
+    xml_string = xml_string.strip()
+
+    return ET.fromstring(xml_string)
+
+def _safe_read_file(ctx, file_path):
+    abs_path = cwd_normalize_path(ctx, file_path)
+
+    try:
+        # Check if file exists to avoid reading from non-existent files
+        content, _ = ctx["environment"].execute(f"cat '{abs_path}'")
+        return content
+    except Exception as e:
+        ctx["config"].logger.error(
+            f"Failed to read file: {file_path}. Error: {str(e)}"
+        )
+        return f"Failed to read file: {file_path}. Error: {str(e)}"
+
+def json_to_markdown(data):
+    try:
+        
+        # Start building the Markdown string
+        markdown = "# Code Blocks\n\n"
+        
+        for block in data.get("codeblocks", []):
+            location = block.get("location", "Unknown location")
+            content = block.get("content", "No content available")
+            
+            # Add the location as a subheading
+            markdown += f"## Location: {location}\n\n"
+            
+            # Add the content as a TypeScript code block
+            markdown += "```\n"
+            markdown += f"// Content of {location}\n"
+            markdown += f"{content.strip()}\n"
+            markdown += "```\n\n"
+        
+        return markdown.strip()
+    except json.JSONDecodeError:
+        return "Error: Invalid JSON input"
+
+class SurfaceContextTool(Tool):
+    shell_env: EnvironmentModule = None
+
+    @property
+    def name(self):
+        return "SurfaceContextTool"
+
+    @property
+    def supported_formats(self):
+        return ["docstring", "manpage"]
+
+    def setup(self, context: ToolContext):
+        pass
+
+    def cleanup(self, context: ToolContext):
+        pass
+
+    def documentation(self, format="docstring"):
+        match format:
+            case "docstring":
+                return self.function.__doc__
+            case "manpage":
+                return """
+                NAME
+                    surface_context - surfaces POTENTIALLY relevant context to the user and asks them to approve its use as part of this task
+
+                SYNOPSIS
+                    surface_context "<codeblocks><codeblock><location>[location]</location></codeblock>...</codeblocks>"
+
+                DESCRIPTION
+                    The surface_context command asks the user for their input on potentially relevant code blocks and asks them to approve them for use in the task.
+
+                RETURN VALUE
+                    The surface_context command returns which context blocks are relevant to the task
+
+                EXAMPLES
+                    To surface context about a particular for loop, run the following command:
+
+                        surface_context "<codeblocks><codeblock><location>sample/path/file.py</location></codeblock>...</codeblocks>"
+                """
+            case _:
+                raise ValueError(f"Invalid format: {format}")
+
+    def function(self, context: ToolContext, codeblocks: str, **kwargs):
+        """
+        command_name: surface_context
+        description: The surface_context command asks the user for their input on potentially relevant code blocks and asks them to approve them for use in the task.
+        signature: surface_context "<codeblocks><codeblock><location>[location]</location></codeblock></codeblocks>"
+        example: `surface_context "<codeblocks><codeblock><location>sample/path/file.py</location></codeblocks>"`
+        """
+
+        # Remove any leading/trailing whitespace and add a root element if not present
+        codeblock_xml = parse_xml_tags_to_xml("<codeblocks>", "</codeblocks>", codeblocks)
+
+        locations = []
+
+        for child in codeblock_xml:
+            if child.tag == "codeblock":
+                for element in child:
+                    if element.tag == "location":
+
+                        code = _safe_read_file({"environment": self.shell_env, "config": context["config"]}, element.text)
+                        locations.append({
+                            "location": element.text,
+                            "content": code
+                        })
+
+        locations = {"codeblocks": locations}
+
+        return context["environment"].execute(input=json_to_markdown(locations))
 
 class SetTaskTool(Tool):
     @property

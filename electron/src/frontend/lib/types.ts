@@ -23,6 +23,7 @@ export type Message = {
     type:
         | 'user'
         | 'agent'
+        | 'context'
         | 'command'
         | 'tool'
         | 'task'

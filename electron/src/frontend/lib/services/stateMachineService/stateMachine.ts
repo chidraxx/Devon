@@ -204,7 +204,7 @@ export const eventHandlingLogic = fromTransition(
                     userRequest: true,
                     messages: [
                         ...state.messages,
-                        { text: event.content, type: 'agent' } as Message,
+                        { text: event.content, type: 'context' } as Message,
                     ],
                 }
             }

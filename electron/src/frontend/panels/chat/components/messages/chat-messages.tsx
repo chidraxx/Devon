@@ -14,6 +14,7 @@ import {
     SpinnerMessage,
     RateLimitWarning,
     ErrorMessage,
+    ContextMessage,
 } from '@/panels/chat/components/messages/chat.message-variants'
 import { NotebookPen } from 'lucide-react'
 import type { Message } from '@/lib/types'
@@ -125,6 +126,8 @@ const MemoizedDisplayedChatMessage = React.memo(
                     <ChatTypeWrapper type="Command">
                         {message.text}
                     </ChatTypeWrapper>
+                ) : message.type === 'context' ? (
+                    <ContextMessage content={message.text} />
                 ) : message.type === 'rateLimit' ? (
                     <RateLimitWarning className="text-gray-400" />
                 ) : message.type === 'tool' ? (

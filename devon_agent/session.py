@@ -22,7 +22,7 @@ from devon_agent.tools.filesearchtools import FindFileTool, GetCwdTool, SearchDi
 from devon_agent.tools.filetools import FileTreeDisplay, SearchFileTool
 from devon_agent.tools.lifecycle import NoOpTool
 from devon_agent.tools.shelltool import ShellTool
-from devon_agent.tools.usertools import AskUserToolWithCommit
+from devon_agent.tools.usertools import AskUserToolWithCommit, SurfaceContextTool
 from devon_agent.tools.utils import get_ignored_files, read_file
 from devon_agent.utils.config_utils import get_checkpoint_id
 from devon_agent.utils.telemetry import Posthog, SessionStartEvent
@@ -157,7 +157,10 @@ class Session:
         self.environments["local"].event_log = event_log
         self.environments["user"].event_log = event_log
 
-        self.environments["user"].register_tools({"ask_user": AskUserToolWithCommit().register_post_hook(parse_agent_system_prompt)})
+        self.environments["user"].register_tools({
+            "ask_user": AskUserToolWithCommit().register_post_hook(parse_agent_system_prompt),
+            "surface_context": SurfaceContextTool(shell_env=self.environments["local"])
+        })
         if self.config.versioning_type == "git":
             self.versioning = GitVersioning(config.path, config)
 
