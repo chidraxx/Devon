@@ -5,7 +5,7 @@ import os
 
 import networkx as nx
 
-from devon_agent.retrieval.codebase_graph import add_edge, add_node
+from devon_agent.tools.retrieval.codebase_graph import add_edge, add_node
 
 
 def extract_info_from_ast(graph, ast_tree, file_path):

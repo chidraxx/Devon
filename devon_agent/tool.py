@@ -60,7 +60,7 @@ class Tool(BaseModel, ABC):
         pass
 
     @abstractmethod
-    def setup(self, context: ToolContext):
+    def setup(self, context: ToolContext, **kwargs):
         """
         Setup the tool, called when session starts. Could be used to initialize thr state."""
         pass

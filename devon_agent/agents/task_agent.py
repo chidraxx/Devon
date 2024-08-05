@@ -37,6 +37,7 @@ class TaskAgent(Agent):
 
     default_models = {
         "gpt4-o": OpenAiModel,
+        "gpt-4o-mini": OpenAiModel,
         "claude-opus": AnthropicModel,
         "claude-haiku": AnthropicModel,
         "claude-sonnet": AnthropicModel,
@@ -49,6 +50,9 @@ class TaskAgent(Agent):
 
     default_model_configs = {
         "gpt4-o": {
+            "prompt_type": "openai",
+        },
+        "gpt-4o-mini": {
             "prompt_type": "openai",
         },
         "gpt4-turbo": {

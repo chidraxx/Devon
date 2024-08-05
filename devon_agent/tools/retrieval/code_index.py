@@ -2,10 +2,10 @@ import json
 import os
 from functools import reduce
 
-from devon_agent.retrieval.ast_extractor import extract_info_from_ast
-from devon_agent.retrieval.ast_parser import parse_python_file
-from devon_agent.retrieval.codebase_graph import CodeGraph
-from devon_agent.retrieval.file_discovery import discover_python_files
+from devon_agent.tools.retrieval.ast_extractor import extract_info_from_ast
+from devon_agent.tools.retrieval.ast_parser import parse_python_file
+from devon_agent.tools.retrieval.codebase_graph import CodeGraph
+from devon_agent.tools.retrieval.file_discovery import discover_python_files
 
 
 class FunctionTable:
@@ -145,7 +145,16 @@ class CodeIndex:
                 self.class_table.add_class(name, node[1])
 
     def initialize(self):
-        ignore_directories = [".git", "docs", "__pycache__"]
+        # read gitignore
+        gitignore_path = os.path.join(self.codebase_path, ".gitignore")
+        if os.path.exists(gitignore_path):
+            with open(gitignore_path, "r") as f:
+                gitignore_lines = f.readlines()
+                gitignore_lines = [line.strip() for line in gitignore_lines]
+                gitignore_lines = [line for line in gitignore_lines if line]
+        else:
+            gitignore_lines = []
+        ignore_directories = [".git", "docs", "__pycache__"] + gitignore_lines
 
         python_files = discover_python_files(self.codebase_path, ignore_directories)
 

@@ -22,7 +22,7 @@ class CodeSearch(Tool):
     def supported_formats(self):
         return ["docstring", "manpage"]
 
-    def setup(self, ctx):
+    def setup(self, ctx, **kwargs):
         self.base_path = ctx["environment"].path
 
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -100,7 +100,7 @@ class CodeGoTo(Tool):
     def supported_formats(self):
         return ["docstring", "manpage"]
 
-    def setup(self, ctx):
+    def setup(self, ctx, **kwargs):
         self.base_path = ctx["environment"].path
 
         self.temp_dir = tempfile.TemporaryDirectory()

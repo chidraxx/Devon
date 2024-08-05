@@ -1,14 +1,5 @@
-
-
-
-
-
-
-
-
-
+from argparse import Namespace
 import datetime
-import hashlib
 import inspect
 import json
 import logging
@@ -27,6 +18,7 @@ from devon_agent.agents.task_agent import TaskAgent
 from devon_agent.environments.swebenchenv import SWEEnvEnvironment
 from devon_agent.tool import ToolNotFoundException
 from devon_agent.tools import parse_command
+from devon_agent.tools.codeindex import FindClassTool, FindFunctionTool
 from devon_agent.tools.codenav import CodeGoTo, CodeSearch
 from devon_agent.tools.editorblock import EditBlockTool
 from devon_agent.tools.editortools import CreateFileTool, DeleteFileTool, OpenFileTool, ScrollDownTool, ScrollToLineTool, ScrollUpTool, save_create_file, save_delete_file
@@ -258,7 +250,10 @@ class SweBenchConfig(BaseModel):
     instance_filter: str = ".*"
 
     instances: List[str]
-    
+
+    experiment_id : str = "default"
+    worker_id: int = 0
+
     # Skip instances with existing trajectories
     skip_existing: bool = True
     # Suffix for the run name (used for example in trajectory directory naming)
@@ -298,12 +293,14 @@ class SweBenchConfig(BaseModel):
         return (
             f"{model_name}__t-{temp:.2f}"
             + f"__install-{int(install_env)}"
+            + f"__{self.worker_id}"
             + (f"__{self.suffix}" if self.suffix else "")
+            + f"__{self.experiment_id}"
         )
     
     @property
     def logger(self) -> logging.Logger:
-        return logging.getLogger(self.logger_name)
+        return logging.getLogger(self.logger_name + "_" + self.run_name)
 
 
 class TrajectoryStep(TypedDict):
@@ -317,11 +314,11 @@ class TrajectoryStep(TypedDict):
 class SweBenchSession:
     def __init__(self, config: SweBenchConfig):
         self.config = config
-        self.traj_dir = Path("trajectories") / config.run_name
+        self.traj_dir = Path("trajectories") / config.experiment_id / config.run_name
         self.traj_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.datetime.now().strftime("%y%m%d%H%M%S")
-        log_path = self.traj_dir / f"run-{timestamp}.log"
-        self.logger = logging.getLogger(self.config.logger_name)
+        log_path = self.traj_dir  / f"{self.config.run_name}=run-{timestamp}.log"
+        self.logger = logging.getLogger(self.config.logger_name + "_" + self.config.run_name)
         file_handler = logging.FileHandler(log_path)
         file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
         self.logger.addHandler(file_handler)
@@ -345,6 +342,9 @@ class SweBenchSession:
         }
         self.environments["swebench"].register_tools(
             {
+                "find_function": FindFunctionTool(),
+                "find_class": FindClassTool(),
+
                 "create_file": CreateFileTool().register_post_hook(save_create_file),
                 "open_file": OpenFileTool(),
                 "scroll_up": ScrollUpTool(),
@@ -352,6 +352,7 @@ class SweBenchSession:
                 "scroll_to_line": ScrollToLineTool(),
                 "search_file": SearchFileTool(),
                 "edit": EditBlockTool(),
+
                 # "search_dir": SearchDirTool(),
                 "find_file": FindFileTool(),
                 "get_cwd": GetCwdTool(),
@@ -366,10 +367,13 @@ class SweBenchSession:
 
         # Load Task Instances
         self.data_path = self.config.data_path
+        
         self.data = get_instances(
             self.data_path,
             split=self.config.split,
         )
+        if self.config.instances:
+            self.data = [x for x in self.data if x["instance_id"] in self.config.instances]
         #: Instance we're currently processing. Gets set in self.reset.
         self.record: dict[str, Any] | None = None
 
@@ -381,13 +385,6 @@ class SweBenchSession:
 
     def setup(self):
         self.environments["swebench"].setup()
-        # for tool in self.environments["swebench"].tools.values():
-        #     tool.setup({
-        #         "environment": self.environments["swebench"],
-        #         "config": self.config,
-        #         "state": self.config.state,
-        #         "event_log": [],
-        #     })
 
     def generate_command_docs(self, format="docstring"):
         """
@@ -436,7 +433,7 @@ class SweBenchSession:
                 "config": self.config,
                 "state": self.config.state,
                 "event_log": [],
-            })
+            },codebase_path="./environments/"+record["repo"].replace("/","__"))
                 # Get info, patch information
         issue = record["problem_statement"]
         files = []
@@ -458,10 +455,10 @@ class SweBenchSession:
         steps = 0
         observation = ""
         trajectory = []
-        while steps < 15:
+        while steps < 2:
             steps+=1
             thought, action, output = self.agent.predict(
-                issue, observation,self
+                issue, observation, self
             )
             trajectory.append(TrajectoryStep(
                 action=action,
@@ -572,6 +569,13 @@ class SweBenchSession:
 
         self._save_predictions(instance_id, info)
 
+        self.environments["swebench"].tools["find_function"].cleanup({
+            "environment": self.environments["swebench"],
+            "config": self.config,
+            "state": self.config.state,
+            "event_log": [],
+        },cache_path="cache.json")
+
 
     def should_skip(self, instance_id: str) -> bool:
         """Check if we should skip this instance based on the instance filter and skip_existing flag."""
@@ -602,11 +606,11 @@ class SweBenchSession:
 
         data = json.loads(content)
         # If the trajectory has no exit status, it's incomplete and we will redo it
-        exit_status = data["info"].get("exit_status", None)
-        if exit_status == "early_exit" or exit_status is None:
-            self.logger.warning(f"Found existing trajectory with no exit status: {log_path}. Removing.")
-            log_path.unlink()
-            return False
+        # exit_status = data["info"].get("exit_status", None)
+        # if exit_status == "early_exit" or exit_status is None:
+        #     self.logger.warning(f"Found existing trajectory with no exit status: {log_path}. Removing.")
+        #     log_path.unlink()
+        #     return False
 
         self.logger.info(f"⏭️ Skipping existing trajectory: {log_path}")
         return True
@@ -636,21 +640,53 @@ class SweBenchSession:
             env.teardown()
 
 
-if __name__ == "__main__":
+def main(args : Namespace):
+    print("HERE",args)
     config = SweBenchConfig(
         logger_name="swebench",
-        data_path="/Users/mihirchintawar/agent/SWE-bench_Lite-test.jsonl",
-        split="dev",
+        data_path="SWE-bench_Lite-test.jsonl",
+        split=args.split,
         skip_existing=True,
+        experiment_id=args.experiment_id,
         environment=EnvironmentArguments(
         ),
-        instances=["django__django-11999"],
+        worker_id=args.worker_id if "worker_id" in args else 0,
+        instances=args.instances,
         agent_config=AgentConfig(
-            model="gpt4-o",
+            model=args.model,
             agent_name="devon",
             agent_type="task",
-            temperature=0.5,
+            temperature=args.temperature,
         )
     )
+    print("HERE2",config)
     swebench = SweBenchSession(config)
+
+    print("RUNNNING")
     swebench.run()
+    return swebench.traj_dir,config.experiment_id,config.run_name
+
+
+if __name__ == "__main__":
+
+    # cli args : 
+    # --experiment_id
+    # --split
+    # --environment
+    # --model
+    # --agent_name
+    # --temperature
+    # --instances
+
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Run SweBench experiment")
+    parser.add_argument("--experiment_id", type=str, help="Experiment ID",default="default")
+    parser.add_argument("--split", type=str, choices=["train", "dev", "test"], help="Data split")
+    # parser.add_argument("--environment", type=str, help="Environment configuration")
+    parser.add_argument("--model", type=str, help="Model to use")
+    parser.add_argument("--temperature", type=float, help="Temperature for model sampling")
+    parser.add_argument("--instances", nargs="+", help="List of instances to run")
+
+    args = parser.parse_args()
+    main(args)

@@ -15,7 +15,7 @@ class DeleteFileTool(Tool):
     def supported_formats(self):
         return ["docstring", "manpage"]
 
-    def setup(self, ctx):
+    def setup(self, ctx,**kwargs):
         pass
 
     def cleanup(self, ctx):
@@ -97,7 +97,7 @@ class CreateFileTool(Tool):
     def supported_formats(self):
         return ["docstring", "manpage"]
 
-    def setup(self, ctx):
+    def setup(self, ctx,**kwargs):
         pass
 
     def cleanup(self, ctx):
@@ -210,7 +210,7 @@ class ListFilesTool(Tool):
     def supported_formats(self):
         return ["docstring", "manpage"]
 
-    def setup(self, ctx):
+    def setup(self, ctx,**kwargs):
         pass
 
     def cleanup(self, ctx):
@@ -275,7 +275,7 @@ class ReadFileTool(Tool):
     def supported_formats(self):
         return ["docstring", "manpage"]
 
-    def setup(self, ctx):
+    def setup(self, ctx,**kwargs):
         pass
 
     def cleanup(self, ctx):
@@ -338,7 +338,7 @@ class SearchFileTool(Tool):
     def supported_formats(self):
         return ["docstring", "manpage"]
 
-    def setup(self, ctx):
+    def setup(self, ctx,**kwargs):
         pass
 
     def cleanup(self, ctx):
@@ -435,7 +435,7 @@ class FileTreeDisplay(Tool):
     def supported_formats(self):
         return ["docstring", "manpage"]
 
-    def setup(self, ctx):
+    def setup(self, ctx,**kwargs):
         root_dir = ctx["environment"].path
         self.fileTreeTool = FileTreeTool(root_dir=root_dir)
         pass

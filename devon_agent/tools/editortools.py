@@ -32,7 +32,7 @@ class OpenFileTool(Tool):
     def name(self):
         return "open_file"
 
-    def setup(self, ctx: ToolContext):
+    def setup(self, ctx: ToolContext, **kwargs):
         ctx["state"]["editor"] = {}
         ctx["state"]["editor"]["files"] = {}
         ctx["state"]["editor"]["PAGE_SIZE"] = PAGE_SIZE
@@ -122,7 +122,7 @@ class CloseFileTool(Tool):
     def name(self):
         return "close_file"
 
-    def setup(self, ctx: ToolContext):
+    def setup(self, ctx: ToolContext, **kwargs):
         ctx["state"]["editor"] = {}
         ctx["state"]["editor"]["files"] = {}
         ctx["state"]["editor"]["PAGE_SIZE"] = PAGE_SIZE
@@ -198,7 +198,7 @@ class DeleteFileTool(Tool):
     def supported_formats(self):
         return ["docstring", "manpage"]
 
-    def setup(self, ctx):
+    def setup(self, ctx, **kwargs):
         pass
 
     def cleanup(self, ctx):
@@ -279,7 +279,7 @@ class CreateFileTool(Tool):
     def name(self):
         return "create_file"
 
-    def setup(self, ctx):
+    def setup(self, ctx, **kwargs):
         pass
 
     def cleanup(self, ctx):
@@ -410,7 +410,7 @@ class ScrollUpTool(Tool):
     def name(self):
         return "scroll_up_in_editor"
 
-    def setup(self, ctx: ToolContext):
+    def setup(self, ctx: ToolContext, **kwargs):
         ctx["state"]["editor"]["files"] = {}
         ctx["state"]["editor"]["PAGE_SIZE"] = PAGE_SIZE
 
@@ -501,7 +501,7 @@ class ScrollDownTool(Tool):
     def name(self):
         return "scroll_down"
 
-    def setup(self, ctx: ToolContext):
+    def setup(self, ctx: ToolContext, **kwargs):
         ctx["state"]["editor"]["files"] = {}
         ctx["state"]["editor"]["PAGE_SIZE"] = PAGE_SIZE
 
@@ -594,7 +594,7 @@ class ScrollToLineTool(Tool):
     def name(self):
         return "scroll_to_line"
 
-    def setup(self, ctx: ToolContext):
+    def setup(self, ctx: ToolContext, **kwargs):
         ctx["state"]["editor"]["files"] = {}
         ctx["state"]["editor"]["PAGE_SIZE"] = PAGE_SIZE
 

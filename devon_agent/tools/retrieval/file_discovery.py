@@ -13,6 +13,10 @@ def discover_python_files(root_dir, ignore_dirs=None):
     Returns:
         list: The list of discovered Python file paths.
     """
+
+    
+
+
     if ignore_dirs is None:
         ignore_dirs = []
 

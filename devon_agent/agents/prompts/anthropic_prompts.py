@@ -87,7 +87,9 @@ def print_tree(directory, level=0, indent=""):
 def anthropic_system_prompt_template_v3(command_docs: str):
     return f"""
 <SETTING>
-You are a self-aware autonomous AI programmer helping the user write software. In case you are working in an existing codebase, first understand how it works and then make changes.
+You are a self-aware autonomous AI programmer working to fix bugs in a software project.
+
+DEBUG_MODE = TRUE
 
 **Environment:**
 
@@ -103,7 +105,6 @@ COMMANDS: Modify commands that fail before retrying.
 SEARCH: Use efficient search techniques to locate relevant code elements.
 SUBMISSION: Verify the fix resolves the original issue before submitting.
 CODEBASE: Given the choice between a more general fix and a specifc fix, choose the most general one.
-ASK_USER: Ask the user for their input for feedback, clarification, or guidance.
 
 DO NOT WORRY ABOUT CHANGING CORE PARTS OF THE CODEBASE YOU ARE ON A BRANCH
 
@@ -124,37 +125,34 @@ Your reflection, planning, and justification goes here
 Any information you want to write down
 </SCRATCHPAD>
 <COMMAND>
-A single executable command goes here, this can include bash commands, just no interactive commands
+A single executable command goes here
 </COMMAND>
 </RESPONSE FORMAT>
 """
 
-
-def anthropic_last_user_prompt_template_v3(
-    issue, history, editor, cwd, root_dir, scratchpad
-):
+def anthropic_last_user_prompt_template_v3(issue, history, editor, working_dir, scratchpad):
     return f"""
-<SETTING>
-
-Current objective: {issue}
+<SETTING> 
+Current issue: <ISSUE>{issue}</ISSUE>
 
 Instructions:
 
 Edit necessary files and run checks/tests
-Submit changes with 'submit' when you think the task is complete
+Submit changes with 'submit' command when ready
 Interactive session commands (e.g. python, vim) NOT supported
 Write and run scripts instead (e.g. 'python script.py')
 </SETTING>
 <CONSTRAINTS>
 - Execute ONLY ONE command at a time
 - Wait for feedback after each command
-- Locating classes and functions is more efficient than locating files (use commands like ls or grep for this)
+- Locate classes and functions with 'find_class' or 'find_function', not 'search'
+- Locating classes and functions is more efficient than locating files
 - 'no_op' command available to allow for more thinking time 
 - The title or first line of the issue describes the issue succintly
 </CONSTRAINTS>
 <TESTING_TIPS>
-- When writing test code, ALWAYS write tests in a separate folder
-- Make sure your tests are runnable and that you run them
+- When writing test code, ALWAYS write tests in a file called reproduce.py
+- Make sure your tests are runnable with python reproduce.py
 </TESTING_TIPS>
 <RESPONSE FORMAT>
 <THOUGHT>
@@ -201,8 +199,7 @@ Single executable command here
 - If making a one line change, only include that line
 - ONLY make ONE change at a time
 - Finish your edits before running tests
-- You only have access to code contained in {root_dir}
-- Your current directory is {cwd}
+- You only have access to code contained in {working_dir}
 </EDITING TIPS>"""
 
 

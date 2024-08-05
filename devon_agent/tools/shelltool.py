@@ -12,7 +12,7 @@ class ShellTool(Tool):
     def supported_formats(self):
         return ["docstring", "manpage"]
 
-    def setup(self, ctx):
+    def setup(self, ctx,**kwargs):
         pass
 
     def cleanup(self, ctx):

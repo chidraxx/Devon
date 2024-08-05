@@ -163,11 +163,12 @@ def get_background_pids(container_obj):
 
 
 def _get_non_persistent_container(
-    ctr_name: str, image_name: str
+    ctr_name: str, image_name: str, volume_path: str
 ) -> Tuple[subprocess.Popen, set]:
     startup_cmd = [
         "docker",
         "run",
+        "-v", f"{volume_path}:/environments",
         "-i",
         "--rm",
         "--name",
@@ -280,7 +281,7 @@ def _get_persistent_container(
 
 
 def get_container(
-    ctr_name: str, image_name: str, persistent: bool = False
+    ctr_name: str, image_name: str, volume_path: str, persistent: bool = False
 ) -> subprocess.Popen:
     """
     Get a container object for a given container name and image name
@@ -293,14 +294,15 @@ def get_container(
         Container object
     """
     if persistent:
-        return _get_persistent_container(ctr_name, image_name)
+        return _get_persistent_container(ctr_name, image_name, volume_path)
     else:
-        return _get_non_persistent_container(ctr_name, image_name)
+        return _get_non_persistent_container(ctr_name, image_name, volume_path)
 
 
 class SWEEnvEnvironment(EnvironmentModule):
     logger: logging.Logger
     image_name: str
+    volume_path: str = "./environments"
     tools: Dict[str, "Tool"] = {}
     container_name: Optional[str] = None
     persistent: bool = False
@@ -313,6 +315,7 @@ class SWEEnvEnvironment(EnvironmentModule):
     parent_pids: Optional[set[str]] = None
     base_path: Optional[str] = None
     path: Optional[str] = None
+    
 
     class Config:
         arbitrary_types_allowed = True
@@ -335,7 +338,7 @@ class SWEEnvEnvironment(EnvironmentModule):
 
         # this is what creates the actual container
         self.container, self.parent_pids = get_container(
-            self.container_name, self.image_name, persistent=self.persistent
+            self.container_name, self.image_name, self.volume_path, persistent=self.persistent
         )
 
         print(self.container_name,self.parent_pids,self.container)
@@ -369,6 +372,7 @@ class SWEEnvEnvironment(EnvironmentModule):
             # error_msg="Failed to add commands directory to PATH",
         )
 
+        self.communicate("cd /environments")
 
     def get_pids(self, all_pids=False) -> list[str]:
         """
@@ -535,7 +539,7 @@ class SWEEnvEnvironment(EnvironmentModule):
                 self.communicate(f"rm {PATH_TO_REQS}")
             elif packages == "environment.yml":
                 # Write environment.yml to file
-                content_env_yml = get_environment_yml(self.record, env_name)
+                content_env_yml = get_environment_yml(record, env_name)
                 copy_file_to_container(
                     self.container_obj, content_env_yml, PATH_TO_ENV_YML
                 )
@@ -605,18 +609,22 @@ class SWEEnvEnvironment(EnvironmentModule):
                     # error_msg="Post-install commands failed to execute successfully",
                 )
 
+    def load_all_files(self):
+        if self.container_obj:
+            self.container_obj.get_archive(path="/")
+
     def get_cwd(self):
         return self.execute("pwd")[0]
 
     def reset(self, record):
-        self.communicate("cd /")
+        self.communicate("cd /environments")
 
         base_commit = record["base_commit"]
         # query = record["problem_statement"]
         folders = self.communicate(input="ls")[0].split("\n")
         print(folders)
         repo_name = record["repo"].replace("/", "__")
-        self.base_path = "/" + record["repo"].replace("/", "__")
+        self.base_path = "/environments/" + record["repo"].replace("/", "__")
         self.path = self.base_path
         print(self.communicate("ls " + self.base_path)[0])
 
@@ -626,7 +634,7 @@ class SWEEnvEnvironment(EnvironmentModule):
                 error, rc = self.communicate(
                     input=f"git clone https://{self.token}@github.com/{record['repo']}.git {repo_name}",
                     # error_msg="Failed to clone repository from mirror",
-                    timeout_duration=LONG_TIMEOUT,
+                    timeout_duration=LONG_TIMEOUT * 50,
                 )
                 if rc != 0:
                     raise RuntimeError("Failed to clone repository from mirror" + error)
@@ -634,12 +642,12 @@ class SWEEnvEnvironment(EnvironmentModule):
             else:
                 logger.info("Trying to clone from non-mirror...")
                 _, rc = self.communicate(
-                    input=f"git clone https://{self.token}@github.com/{record['repo']}.git {repo_name}",
+                    input=f"git clone https://github.com/{record['repo']}.git {repo_name}",
                     # error_msg="Failed to clone repository from non-mirror",
-                    timeout_duration=LONG_TIMEOUT,
+                    timeout_duration=LONG_TIMEOUT * 50,
                 )
                 if rc != 0:
-                    raise RuntimeError("Failed to clone repository from non-mirror")
+                    raise RuntimeError("Failed to clone repository from non-mirror "+f"git clone https://github.com/{record['repo']}.git {repo_name}")
         print(self.communicate("ls " + self.base_path)[0])
 
         for cmd in [

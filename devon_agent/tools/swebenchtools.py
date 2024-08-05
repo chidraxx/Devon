@@ -27,7 +27,7 @@ class SubmitTool(Tool):
             case _:
                 return "Unknown format"
 
-    def setup(self, ctx):
+    def setup(self, ctx,**kwargs):
         pass
 
     def function(self, ctx: ToolContext):

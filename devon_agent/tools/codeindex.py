@@ -5,7 +5,7 @@ from devon_agent.tools.retrieval.code_index import CodeIndex
 
 
 def setup_code_index(ctx, **kwargs):
-    if ctx["state"]["code_index"]:
+    if "code_index" in ctx["state"] and ctx["state"]["code_index"]:
         return ctx["state"]["code_index"]
     else:
         if "cache_path" in kwargs and os.path.exists(kwargs["cache_path"]):
@@ -19,11 +19,12 @@ def setup_code_index(ctx, **kwargs):
             if codebase_path is None:
                 raise ValueError("Codebase path is required")
 
-            code_index = CodeIndex(codebase_path)
-            code_index.initialize()
-            if "cache_path" in kwargs:
-                code_index.save_as_json(kwargs["cache_path"])
-            return code_index
+        code_index = CodeIndex(codebase_path)
+        code_index.initialize()
+        ctx["state"]["code_index"] = code_index
+        if "cache_path" in kwargs:
+            code_index.save_as_json(kwargs["cache_path"])
+        return code_index
 
 
 def cleanup_code_index(ctx, code_index, **kwargs):
@@ -33,15 +34,21 @@ def cleanup_code_index(ctx, code_index, **kwargs):
 
 
 class FindFunctionTool(Tool):
+    code_index : CodeIndex | None = None
+
+    class Config:
+        arbitrary_types_allowed = True
+
     @property
     def name(self):
         return "create_file"
 
     def setup(self, ctx, **kwargs):
         self.code_index = setup_code_index(ctx, **kwargs)
+        print("setup codeindex")
 
-    def cleanup(self, ctx):
-        cleanup_code_index(ctx, self.code_index, **self.kwargs)
+    def cleanup(self, ctx, **kwargs):
+        cleanup_code_index(ctx, self.code_index, **kwargs)
 
     def supported_formats(self):
         return ["docstring", "manpage"]
@@ -103,15 +110,21 @@ EXAMPLES
 
 
 class FindClassTool(Tool):
+    code_index : CodeIndex | None = None
+
+    class Config:
+        arbitrary_types_allowed = True
+
     @property
     def name(self):
         return "find_class"
 
     def setup(self, ctx, **kwargs):
         self.code_index = setup_code_index(ctx, **kwargs)
-
-    def cleanup(self, ctx):
-        cleanup_code_index(ctx, self.code_index, **self.kwargs)
+        print("setup codeindex")
+        
+    def cleanup(self, ctx, **kwargs):
+        cleanup_code_index(ctx, self.code_index, **kwargs)       
 
     def supported_formats(self):
         return ["docstring", "manpage"]

@@ -17,7 +17,7 @@ class EditBlockTool(Tool):
     def supported_formats(self):
         return ["docstring", "manpage"]
 
-    def setup(self, context: ToolContext):
+    def setup(self, context: ToolContext, **kwargs):
         pass
         # context.state['edit_history'] = []
 

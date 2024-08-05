@@ -21,7 +21,7 @@ class SemanticSearch(Tool):
     def supported_formats(self):
         return ["docstring", "manpage"]
 
-    def setup(self, ctx):
+    def setup(self, ctx,**kwargs):
         self.db_path = ctx["config"].db_path
         # self.vectorDB = chromadb.PersistentClient(path=os.path.join(self.base_path, "vectorDB"))
         self.vectorDB_path = os.path.join(self.db_path, "vectorDB")
