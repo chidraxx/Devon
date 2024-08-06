@@ -456,7 +456,7 @@ class SWEEnvEnvironment(EnvironmentModule):
             rc = 0
             return "", rc
 
-    def execute(self, input: str, timeout_duration=25):
+    def execute(self, input: str, timeout_duration=150):
         return self.communicate(input, timeout_duration=timeout_duration)
 
     def teardown(self, **kwargs):

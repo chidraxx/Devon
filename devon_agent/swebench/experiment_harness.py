@@ -28,13 +28,18 @@ from devon_agent.swebench.servers import spin_down, spin_up
 # 100 %
 SUPER_EASY_ISSUES = ["pytest-dev__pytest-5227", "sympy__sympy-20212", "sympy__sympy-24152", "matplotlib__matplotlib-23964", "django__django-14855", "django__django-14752", "django__django-11039", "django__django-11099", "sympy__sympy-13480", "pytest-dev__pytest-11143", "django__django-11133", "django__django-14382", "django__django-13658", "sympy__sympy-14774", "django__django-16046", "django__django-16527", "django__django-16255", "scikit-learn__scikit-learn-14894", "mwaskom__seaborn-3010"]
 
+# as args: pytest-dev__pytest-5227 sympy__sympy-20212 sympy__sympy-24152 matplotlib__matplotlib-23964 django__django-14855 django__django-14752 django__django-11039 django__django-11099 sympy__sympy-13480 pytest-dev__pytest-11143 django__django-11133 django__django-14382 django__django-13658 sympy__sympy-14774 django__django-16046 django__django-16527 django__django-16255 scikit-learn__scikit-learn-14894 mwaskom__seaborn-3010
+
 # 80 - 90%
 EASY_ISSUES = ["django__django-14915", "django__django-11049", "django__django-16379", "django__django-16873", "django__django-11583", "django__django-16595", "scikit-learn__scikit-learn-13779", "django__django-13933", "pydata__xarray-5131", "scikit-learn__scikit-learn-13480","django__django-12286","django__django-16139","django__django-12453","pytest-dev__pytest-7373","django__django-13590","pytest-dev__pytest-5692","django__django-12700","sympy__sympy-13647","django__django-10914"]
+
+# django__django-14915 django__django-11049 django__django-16379 django__django-16873 django__django-11583 django__django-16595 scikit-learn__scikit-learn-13779 django__django-13933 pydata__xarray-5131 scikit-learn__scikit-learn-13480 django__django-12286 django__django-16139 django__django-12453 pytest-dev__pytest-7373 django__django-13590 pytest-dev__pytest-5692 django__django-12700 sympy__sympy-13647 django__django-10914
 
 # 60 - 80%
 MEDIUM_ISSUES = ["psf__requests-2317", "sympy__sympy-21847", "sympy__sympy-17655", "django__django-11179", "sympy__sympy-22714", "django__django-12983", "django__django-16041", "sympy__sympy-24213", "django__django-15347", "psf__requests-2674", "matplotlib__matplotlib-23913","psf__requests-863","django__django-13710","django__django-15851","django__django-14238","sphinx-doc__sphinx-8713","django__django-13447","scikit-learn__scikit-learn-11281","sympy__sympy-12481","django__django-13230","scikit-learn__scikit-learn-15535","sphinx-doc__sphinx-8721"]
 
-# 40 - 60%
+# psf__requests-2317 sympy__sympy-21847 sympy__sympy-17655 django__django-11179 sympy__sympy-22714 django__django-12983 django__django-16041 sympy__sympy-24213 django__django-15347 psf__requests-2674 matplotlib__matplotlib-23913 psf__requests-863 django__django-13710 django__django-15851 django__django-14238 sphinx-doc__sphinx-8713 django__django-13447 scikit-learn__scikit-learn-11281 sympy__sympy-12481 django__django-13230 scikit-learn__scikit-learn-15535 sphinx-doc__sphinx-8721
+
 # 40 - 60%
 MEDIUM_HARD_ISSUES = ["django__django-12497", "scikit-learn__scikit-learn-13584", "sympy__sympy-13971", "sphinx-doc__sphinx-8595", "django__django-11848", "scikit-learn__scikit-learn-25570", "sympy__sympy-17022", "sympy__sympy-17139", "django__django-12915", "django__django-13028","sympy__sympy-18057","matplotlib__matplotlib-26020","sympy__sympy-18532","scikit-learn__scikit-learn-13496","pytest-dev__pytest-7432","django__django-14999","scikit-learn__scikit-learn-10297","django__django-12708","sympy__sympy-23117","astropy__astropy-14995","django__django-14787","scikit-learn__scikit-learn-13241","sympy__sympy-21055","django__django-14608","django__django-13401","django__django-14016","matplotlib__matplotlib-23562","django__django-13158",
 "sympy__sympy-15678",
@@ -52,6 +57,9 @@ MEDIUM_HARD_ISSUES = ["django__django-12497", "scikit-learn__scikit-learn-13584"
 "pylint-dev__pylint-7993",
 "matplotlib__matplotlib-24149",
 "sympy__sympy-15609"]
+
+# django__django-12497 scikit-learn__scikit-learn-13584 sympy__sympy-13971 sphinx-doc__sphinx-8595 django__django-11848 scikit-learn__scikit-learn-25570 sympy__sympy-17022 sympy__sympy-17139 django__django-12915 django__django-13028 sympy__sympy-18057 matplotlib__matplotlib-26020 sympy__sympy-18532 scikit-learn__scikit-learn-13496 pytest-dev__pytest-7432 django__django-14999 scikit-learn__scikit-learn-10297 django__django-12708 sympy__sympy-23117 astropy__astropy-14995 django__django-14787 scikit-learn__scikit-learn-13241 sympy__sympy-21055 django__django-14608 django__django-13401 django__django-14016 matplotlib__matplotlib-23562 django__django-13158 sympy__sympy-15678 django__django-11999 django__django-11815 sympy__sympy-18621 sympy__sympy-20154 scikit-learn__scikit-learn-12471 sympy__sympy-24066 django__django-15814 django__django-15789 sympy__sympy-13471 django__django-15790 django__django-15498 pylint-dev__pylint-7993 matplotlib__matplotlib-24149 sympy__sympy-15609
+
 
 # 20 - 40%
 HARD_ISSUES = [
@@ -86,6 +94,7 @@ HARD_ISSUES = [
     "sympy__sympy-16988",
     "psf__requests-3362"
 ]
+# psf__requests-1963 django__django-13964 django__django-11964 django__django-14017 astropy__astropy-6938 django__django-14672 django__django-12125 django__django-11422 django__django-17087 django__django-12284 django__django-17051 django__django-13315 django__django-11001 sympy__sympy-14396 pytest-dev__pytest-11148 sympy__sympy-13031 sympy__sympy-15011 matplotlib__matplotlib-24970 matplotlib__matplotlib-23314 scikit-learn__scikit-learn-13497 scikit-learn__scikit-learn-13142 sympy__sympy-23262 sympy__sympy-21614 matplotlib__matplotlib-26011 pylint-dev__pylint-6506 sympy__sympy-18189 mwaskom__seaborn-3190 scikit-learn__scikit-learn-15512 sympy__sympy-16988 psf__requests-3362
 
 # 1 - 20%
 HARD_HARD_ISSUES = [
@@ -118,6 +127,9 @@ HARD_HARD_ISSUES = [
 "pytest-dev__pytest-5495",
 "django__django-12856",
 "django__django-14580"]
+
+# django__django-13551 astropy__astropy-14182 sympy__sympy-21379 astropy__astropy-14365 sphinx-doc__sphinx-8627 django__django-10924 sphinx-doc__sphinx-8506 matplotlib__matplotlib-24334 sympy__sympy-22840 sympy__sympy-22005 matplotlib__matplotlib-25442 django__django-12747 django__django-15902 sympy__sympy-20442 sphinx-doc__sphinx-10325 pytest-dev__pytest-7490 django__django-13925 django__django-12308 pylint-dev__pylint-7114 sympy__sympy-24909 scikit-learn__scikit-learn-14092 scikit-learn__scikit-learn-25500 django__django-13768 django__django-14411 django__django-12113 django__django-11620 pytest-dev__pytest-5495 django__django-12856 django__django-14580
+
 
 # 0 - 1%
 ALMOST_IMPOSSIBLE_ISSUES = [

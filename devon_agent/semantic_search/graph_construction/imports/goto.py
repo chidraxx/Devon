@@ -65,8 +65,12 @@ class CodebaseIndexer:
         with open(file_path, 'r') as file:
             content = file.read()
             tree = self.parser.parse(content.encode())
-            ast_tree = ast.parse(content)
-        self._traverse_tree(tree.root_node, file_path, content, ast_tree)
+            try:
+                ast_tree = ast.parse(content)
+                self._traverse_tree(tree.root_node, file_path, content, ast_tree)
+            except Exception as e:
+                return 
+        
 
     def _traverse_tree(self, node: Node, file_path: str, content: str, ast_tree: ast.AST, parent: Optional[str] = None):
         if node.type == 'function_definition':

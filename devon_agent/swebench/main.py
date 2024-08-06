@@ -420,6 +420,7 @@ class SweBenchSession:
     def run_task(self, index):
         self.config.state = {}
         self.state = self.config.state
+        self.agent.reset()
 
         instance_id = self.data[index]["instance_id"]
         record = self.data[index]
@@ -455,7 +456,7 @@ class SweBenchSession:
         steps = 0
         observation = ""
         trajectory = []
-        while steps < 2:
+        while steps < 15:
             steps+=1
             thought, action, output = self.agent.predict(
                 issue, observation, self
@@ -505,6 +506,7 @@ class SweBenchSession:
                     *args,
                 )
                 observation = response
+                print("RESPONSE",response,observation)
 
             except ToolNotFoundException as e:
                 if not (
@@ -527,6 +529,8 @@ class SweBenchSession:
                         args,
                     )
                     observation = response
+                    print("RESPONSE",response,observation)
+
 
                 except Exception as e:
                     self.logger.error(traceback.format_exc())
@@ -537,6 +541,8 @@ class SweBenchSession:
                 self.logger.error(traceback.format_exc())
                 self.logger.error(f"Error routing tool call: {e}")
                 observation = f"Error routing tool call: {e}"
+                print("RESPONSE",f"Error routing tool call: {e}",observation)
+
 
         
         print("LOOP ENDED")

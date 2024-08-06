@@ -35,7 +35,8 @@ from devon_agent.semantic_search.graph_construction.imports.goto import Codebase
 
 
 class FindFunctionTool(Tool):
-    code_index : CodeIndex | None = None
+    # code_index : CodeIndex | None = None
+    indexer : CodebaseIndexer | None = None
 
     class Config:
         arbitrary_types_allowed = True
@@ -45,8 +46,9 @@ class FindFunctionTool(Tool):
         return "create_file"
 
     def setup(self, ctx, **kwargs):
-        self.indexer = CodebaseIndexer("/Users/arnav/Desktop/django/django/django/")
-        self.indexer.index_codebase()
+        if "codebase_path" in kwargs:
+            self.indexer = CodebaseIndexer(kwargs["codebase_path"])
+            self.indexer.index_codebase()
 
     def cleanup(self, ctx, **kwargs):
         # cleanup_code_index(ctx, self.code_index, **kwargs)
@@ -109,23 +111,29 @@ EXAMPLES
         find_function [function_name] - Find the location of a function in the codebase.
 
         Parameters:
-        function_name (str): The name of the function to locate. For methods, use ClassName.MethodName.
+        function_name (str): The name of the function to locate. For methods, use ClassName.MethodName. Do not include the module name.
 
         Returns:
         str: Details of the function, including its location and docstring.
         """
+        print("function_name",function_name)
         function_infos = self.indexer.get_function_info(function_name)
         result = ""
+        if not function_infos:
+            return "No such function. Make sure the function exists"
         for info in function_infos:
+            file_path = info['location']['file_path'][len(self.indexer.root_path)+1:] if info['location']['file_path'].startswith(self.indexer.
+            root_path) else info['location']['file_path']
             result += (f"Function/Method: {info['name']} \n")
-            result += (f"Location: {info['location']['file_path']}:{info['location']['start_line']}-{info['location']['end_line']} \n")
+            result += (f"Location: {file_path}:{info['location']['start_line']}-{info['location']['end_line']} \n")
             result += (f"Code:\n{info['code']} \n")
             result += (f"Docstring: {info['doc']} \n\n")
         return result
 
 
 class FindClassTool(Tool):
-    code_index : CodeIndex | None = None
+    # code_index : CodeIndex | None = None
+    indexer : CodebaseIndexer | None = None
 
     class Config:
         arbitrary_types_allowed = True
@@ -135,8 +143,9 @@ class FindClassTool(Tool):
         return "find_class"
 
     def setup(self, ctx, **kwargs):
-        self.indexer = CodebaseIndexer("/Users/arnav/Desktop/django/django/django/")
-        self.indexer.index_codebase()
+        if "codebase_path" in kwargs:
+            self.indexer = CodebaseIndexer(kwargs["codebase_path"])
+            self.indexer.index_codebase()
         
     def cleanup(self, ctx, **kwargs):
         pass   
@@ -187,15 +196,18 @@ EXAMPLES
         find_class [class_name] - Find the location of a class in the codebase.
 
         Parameters:
-        class_name (str): The name of the class to locate.
+        class_name (str): The exact name of the class to locate. Do not include the module name.
 
         Returns:
         str: Details of the class, including its location.
         """
         class_info = self.indexer.get_class_info(class_name)
         result = ""
+        if class_info is None:
+            return "No such class. Make sure the class exists"
         for info in class_info:
-            result += (f"Class: {info['location']['file_path']}:{info['location']['start_line']}-{info['location']['end_line']}\n")
+            file_path = info['location']['file_path'][len(self.indexer.root_path)+1:] if info['location']['file_path'].startswith(self.indexer.root_path) else info['location']['file_path']
+            result += (f"Class: {file_path}:{info['location']['start_line']}-{info['location']['end_line']}\n")
             result += (f"Code:\n{info['code']} \n")
             result += (f"Docstring: {info['doc']} \n")
             result += (f"Methods: {', '.join(info['methods'])} \n\n")

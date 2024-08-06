@@ -50,7 +50,7 @@ class TaskAgent(Agent):
 
     default_model_configs = {
         "gpt4-o": {
-            "prompt_type": "openai",
+            "prompt_type": "anthropic",
         },
         "gpt-4o-mini": {
             "prompt_type": "openai",
@@ -160,13 +160,13 @@ class TaskAgent(Agent):
             task,
             history,
             editor,
-            get_cwd(
-                {
-                    "session": session,
-                    "environment": session.default_environment,
-                    "state": session.state,
-                }
-            ),
+            # get_cwd(
+            #     {
+            #         "session": session,
+            #         "environment": session.default_environment,
+            #         "state": session.state,
+            #     }
+            # ),
             session.environments["swebench"].base_path,
             self.scratchpad,
         )

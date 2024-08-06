@@ -162,7 +162,8 @@ class FindFileTool(Tool):
         base_path = get_cwd(ctx)
         command = f"find {base_path} -type f -name '{filename}'"
         result = ctx["environment"].execute(command)
-        if result[0] is None:
+        print(result)
+        if not result[0]:
             return "No such file. Make sure the file exists"
         return result[0]
 
