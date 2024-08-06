@@ -2,35 +2,36 @@ import os
 
 from devon_agent.tool import Tool
 from devon_agent.tools.retrieval.code_index import CodeIndex
+from devon_agent.semantic_search.graph_construction.imports.goto import CodebaseIndexer
 
 
-def setup_code_index(ctx, **kwargs):
-    if "code_index" in ctx["state"] and ctx["state"]["code_index"]:
-        return ctx["state"]["code_index"]
-    else:
-        if "cache_path" in kwargs and os.path.exists(kwargs["cache_path"]):
-            return CodeIndex.load_from_json(kwargs["cache_path"])
-        else:
-            codebase_path = None
-            if "codebase_path" in kwargs:
-                codebase_path = kwargs["codebase_path"]
-            else:
-                codebase_path = ctx["environment"].path
-            if codebase_path is None:
-                raise ValueError("Codebase path is required")
+# def setup_code_index(ctx, **kwargs):
+#     if "code_index" in ctx["state"] and ctx["state"]["code_index"]:
+#         return ctx["state"]["code_index"]
+#     else:
+#         if "cache_path" in kwargs and os.path.exists(kwargs["cache_path"]):
+#             return CodeIndex.load_from_json(kwargs["cache_path"])
+#         else:
+#             codebase_path = None
+#             if "codebase_path" in kwargs:
+#                 codebase_path = kwargs["codebase_path"]
+#             else:
+#                 codebase_path = ctx["environment"].path
+#             if codebase_path is None:
+#                 raise ValueError("Codebase path is required")
 
-        code_index = CodeIndex(codebase_path)
-        code_index.initialize()
-        ctx["state"]["code_index"] = code_index
-        if "cache_path" in kwargs:
-            code_index.save_as_json(kwargs["cache_path"])
-        return code_index
+#         code_index = CodeIndex(codebase_path)
+#         code_index.initialize()
+#         ctx["state"]["code_index"] = code_index
+#         if "cache_path" in kwargs:
+#             code_index.save_as_json(kwargs["cache_path"])
+#         return code_index
 
 
-def cleanup_code_index(ctx, code_index, **kwargs):
-    if "cache_path" in kwargs:
-        if not os.path.exists(kwargs["cache_path"]):
-            code_index.save_as_json(kwargs["cache_path"])
+# def cleanup_code_index(ctx, code_index, **kwargs):
+#     if "cache_path" in kwargs:
+#         if not os.path.exists(kwargs["cache_path"]):
+#             code_index.save_as_json(kwargs["cache_path"])
 
 
 class FindFunctionTool(Tool):
@@ -44,11 +45,12 @@ class FindFunctionTool(Tool):
         return "create_file"
 
     def setup(self, ctx, **kwargs):
-        self.code_index = setup_code_index(ctx, **kwargs)
-        print("setup codeindex")
+        self.indexer = CodebaseIndexer("/Users/arnav/Desktop/django/django/django/")
+        self.indexer.index_codebase()
 
     def cleanup(self, ctx, **kwargs):
-        cleanup_code_index(ctx, self.code_index, **kwargs)
+        # cleanup_code_index(ctx, self.code_index, **kwargs)
+        pass
 
     def supported_formats(self):
         return ["docstring", "manpage"]
@@ -102,11 +104,24 @@ EXAMPLES
             case _:
                 raise ValueError(f"Unsupported format: {format}")
 
-    def function(self, ctx, function_name: str, **kwargs):
+    def function(self, ctx, function_name: str):
         """
         find_function [function_name] - Find the location of a function in the codebase.
+
+        Parameters:
+        function_name (str): The name of the function to locate. For methods, use ClassName.MethodName.
+
+        Returns:
+        str: Details of the function, including its location and docstring.
         """
-        return self.code_index.function_table.get_function_with_location(function_name)
+        function_infos = self.indexer.get_function_info(function_name)
+        result = ""
+        for info in function_infos:
+            result += (f"Function/Method: {info['name']} \n")
+            result += (f"Location: {info['location']['file_path']}:{info['location']['start_line']}-{info['location']['end_line']} \n")
+            result += (f"Code:\n{info['code']} \n")
+            result += (f"Docstring: {info['doc']} \n\n")
+        return result
 
 
 class FindClassTool(Tool):
@@ -120,11 +135,11 @@ class FindClassTool(Tool):
         return "find_class"
 
     def setup(self, ctx, **kwargs):
-        self.code_index = setup_code_index(ctx, **kwargs)
-        print("setup codeindex")
+        self.indexer = CodebaseIndexer("/Users/arnav/Desktop/django/django/django/")
+        self.indexer.index_codebase()
         
     def cleanup(self, ctx, **kwargs):
-        cleanup_code_index(ctx, self.code_index, **kwargs)       
+        pass   
 
     def supported_formats(self):
         return ["docstring", "manpage"]
@@ -167,8 +182,22 @@ EXAMPLES
             case _:
                 raise ValueError(f"Unsupported format: {format}")
 
-    def function(self, ctx, class_name: str, **kwargs):
+    def function(self, ctx, class_name: str):
         """
         find_class [class_name] - Find the location of a class in the codebase.
+
+        Parameters:
+        class_name (str): The name of the class to locate.
+
+        Returns:
+        str: Details of the class, including its location.
         """
-        return self.code_index.class_table.get_class_with_location(class_name)
+        class_info = self.indexer.get_class_info(class_name)
+        result = ""
+        for info in class_info:
+            result += (f"Class: {info['location']['file_path']}:{info['location']['start_line']}-{info['location']['end_line']}\n")
+            result += (f"Code:\n{info['code']} \n")
+            result += (f"Docstring: {info['doc']} \n")
+            result += (f"Methods: {', '.join(info['methods'])} \n\n")
+        
+        return result
