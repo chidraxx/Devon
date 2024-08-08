@@ -7,7 +7,7 @@ import AtomLoader from '@/components/ui/atom-loader/atom-loader'
 import { loadAppSettings } from '@/lib/app-settings'
 
 const LOADING_TIMEOUT = 15000
-const MINIMUM_LOADING_DURATION = 0
+const MINIMUM_LOADING_DURATION = 3000
 
 export default function IndexPage() {
     const { backendUrl } = useBackendUrl()
@@ -34,7 +34,7 @@ export default function IndexPage() {
         // Ensure the loader is displayed for at least 1.5 seconds
         const minimumLoadingTimer = setTimeout(() => {
             setIsLoading(false)
-        }, 1000)
+        }, MINIMUM_LOADING_DURATION)
 
         const loadingTimeoutTimer = setTimeout(() => {
             if (!smHealthCheckDone) {

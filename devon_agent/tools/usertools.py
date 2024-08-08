@@ -151,7 +151,6 @@ def json_to_markdown(data):
         markdown = "# Code Blocks\n\n"
         
         for block in data.get("codeblocks", []):
-            print('block', block)
             location = block.get("location", "Unknown location")
             content = block.get("content", "No content available")
             
