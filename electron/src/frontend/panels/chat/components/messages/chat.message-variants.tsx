@@ -194,6 +194,7 @@ export const ToolResponseMessage = ({
         const files = parseDiff(unifiedDiff)
 
         return (
+            <>
             <div className="flex ml-[50px] flex-col">
                 {parsedRes &&
                     parsedRes.command != 'create_file' &&
@@ -215,7 +216,10 @@ export const ToolResponseMessage = ({
                         <DiffViewer files={files} />
                     </div>
                 </div>
+                
             </div>
+            {response && <ResponseBlock response={response} />}
+            </>
         )
     }
     return (
