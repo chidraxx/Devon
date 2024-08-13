@@ -138,14 +138,10 @@ export const ContextMessage = ({
     content: string
     className?: string
 }) => {
-    console.log(content)
+    // console.log(content)
     const icon = (
-        <div className="scale-x-[-1] translate-x-1 flex size-[32px] shrink-0 select-none items-center justify-center rounded-md text-primary-foreground shadow-sm">
-            {/* <TfiThought size={28} /> */}
-            <Icon
-                icon="mdi:thinking"
-                className="w-[30px] h-[30px] transform -scale-x-100"
-            />
+        <div className="flex size-[32px] shrink-0 select-none items-center justify-center rounded-md border bg-primary text-primary-foreground shadow-sm">
+            <Bot />
         </div>
     )
     return <StyledMessage content={content} className={className} icon={icon} />

@@ -203,7 +203,7 @@ export default function CodeEditor({
             const relativePath = getRelativePath(fileId, path)
             const fileName = getFileName(fileId)
             const language =
-                files?.find(f => f.id === fileId)?.language ?? 'text'
+                files?.find(f => f.id === fileId)?.language || 'plaintext'
 
             const id: SnippetId = `${relativePath}:${selection.startLineNumber}-${selection.endLineNumber}`
 
@@ -648,7 +648,7 @@ const BothEditorTypes = ({
                 theme="vs-dark"
                 original={diffContent.before}
                 modified={diffContent.after}
-                language={file?.language ?? 'python'}
+                language={file?.language || 'python'}
                 onMount={handleCustomDiffEditorDidMount}
                 options={customDiffEditorOptions}
             />
@@ -661,7 +661,7 @@ const BothEditorTypes = ({
                 className="h-full"
                 theme="vs-dark"
                 defaultLanguage={'python'}
-                language={file?.language ?? 'python'}
+                language={file?.language || 'python'}
                 defaultValue={''}
                 value={
                     checkpointTracker?.selected && diffContent
