@@ -17,6 +17,7 @@ import { checkpointTrackerAtom } from '@/panels/timeline/lib'
 import { useToast } from '@/components/ui/use-toast'
 
 export const selectedCodeSnippetAtom = atom<ICodeSnippet | null>(null)
+const THEME = 'vs-dark' // 'hc-black'
 
 export default function CodeEditor({
     files,
@@ -231,7 +232,7 @@ export default function CodeEditor({
             editorRef.current = editor
             monacoRef.current = monaco
             monaco.editor.defineTheme('theme', {
-                base: 'vs-dark',
+                base: THEME,
                 inherit: true,
                 rules: [],
                 colors: {},
@@ -510,7 +511,7 @@ const BothEditorTypes = ({
     const name = SessionMachineContext.useSelector(state => state.context.name)
 
     useEffect(() => {
-        if (diffEditorRef.current) {
+        if (diffEditorRef?.current) {
             reloadEditorForSyntaxHighlighting(diffEditorRef)
         }
     }, [diffContent, showInlineDiff, file?.id])
@@ -615,11 +616,12 @@ const BothEditorTypes = ({
     }
 
     const handleCustomDiffEditorDidMount = (editor, monaco) => {
-        handleDiffEditorDidMount(editor, monaco)
+        if (!editor || !monaco) return
         diffEditorRef.current = editor
+        handleDiffEditorDidMount(editor, monaco)
 
         monaco.editor.defineTheme('custom-diff-theme', {
-            base: 'vs-dark',
+            base: THEME,
             inherit: true,
             rules: [],
             colors: {
@@ -645,7 +647,7 @@ const BothEditorTypes = ({
         return (
             <DiffEditor
                 className="h-full"
-                theme="vs-dark"
+                theme={THEME}
                 original={diffContent.before}
                 modified={diffContent.after}
                 language={file?.language || 'python'}
@@ -659,7 +661,7 @@ const BothEditorTypes = ({
         <>
             <Editor
                 className="h-full"
-                theme="vs-dark"
+                theme={THEME}
                 defaultLanguage={'python'}
                 language={file?.language || 'python'}
                 defaultValue={''}

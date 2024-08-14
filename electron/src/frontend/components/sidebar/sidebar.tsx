@@ -54,7 +54,7 @@ export default function Sidebar({
     expanded,
     setExpanded,
     showMinimizedTimeline,
-    setShowMinimizedTimeline
+    setShowMinimizedTimeline,
 }: {
     expanded: boolean
     setExpanded: (expanded: boolean) => void
@@ -64,7 +64,6 @@ export default function Sidebar({
     const [activeTabId, setActiveTabId] = useState(sidebarItems[0].id)
     const contentRef = useRef(null)
     // const showMinimizedTimeline = useRef(false)
-    
 
     function handleClick(id: string) {
         if (id === activeTabId) {
@@ -83,7 +82,7 @@ export default function Sidebar({
                     : showMinimizedTimeline
                     ? 'rounded-r-lg border-none'
                     : 'rounded-r-lg border'
-            }`}
+            } hidden md:block`}
         >
             <nav
                 className={`h-full flex flex-col border-outlinecolor bg-midnight ${

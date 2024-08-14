@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import remarkGfm from 'remark-gfm'
 import { cn } from '@/lib/utils'
 import { CodeBlock } from '@/components/ui/codeblock'
 import { MemoizedReactMarkdown } from '../ui/memoized-react-markdown'
@@ -30,111 +31,114 @@ const StyledMessage = ({
                         <strong>Path:</strong> {path}
                     </div>
                 )}
-                {contentParts.map((part, index) => {
-                    if (part.type === 'markdown') {
-                        return (
-                            <MemoizedReactMarkdown
-                                key={index}
-                                className="prose break-words dark:prose-invert prose-p:leading-relaxed prose-pre:p-0 chat-text-relaxed"
-                                components={{
-                                    p({ children }) {
-                                        return (
-                                            <p className="mb-2 last:mb-0 whitespace-pre-wrap">
-                                                {children}
-                                            </p>
-                                        )
-                                    },
-                                    code({
-                                        node,
-                                        className,
-                                        children,
-                                        ...props
-                                    }) {
-                                        const value = String(children).replace(
-                                            /\n$/,
-                                            ''
-                                        )
-                                        const languageMatch =
-                                            /language-(\w+)/.exec(
+                <div className="space-y-4">
+                    {contentParts.map((part, index) => {
+                        if (part.type === 'markdown') {
+                            return (
+                                <MemoizedReactMarkdown
+                                    key={index}
+                                    className="prose break-words dark:prose-invert prose-p:leading-relaxed prose-pre:p-0 chat-text-relaxed"
+                                    remarkPlugins={[remarkGfm]}
+                                    components={{
+                                        p({ children }) {
+                                            return (
+                                                <p className="mb-2 last:mb-0 whitespace-pre-wrap">
+                                                    {children}
+                                                </p>
+                                            )
+                                        },
+                                        code({
+                                            node,
+                                            className,
+                                            children,
+                                            ...props
+                                        }) {
+                                            const value = String(
+                                                children
+                                            ).replace(/\n$/, '')
+                                            const languageMatch =
+                                                /language-(\w+)/.exec(
+                                                    className || ''
+                                                )
+                                            const lang = languageMatch
+                                                ? languageMatch[1]
+                                                : ''
+
+                                            if (
+                                                value.split('\n').length ===
+                                                    1 &&
+                                                !props.meta
+                                            ) {
+                                                return (
+                                                    <code
+                                                        className={cn(
+                                                            'bg-black px-[6px] py-[3px] rounded-md text-primary text-opacity-90 text-[0.9rem]',
+                                                            className
+                                                        )}
+                                                        {...props}
+                                                    >
+                                                        {value}
+                                                    </code>
+                                                )
+                                            }
+
+                                            const match = /language-(\w+)/.exec(
                                                 className || ''
                                             )
-                                        const lang = languageMatch
-                                            ? languageMatch[1]
-                                            : ''
-
-                                        if (
-                                            value.split('\n').length === 1 &&
-                                            !props.meta
-                                        ) {
+                                            const meta = props.meta || ''
                                             return (
-                                                <code
-                                                    className={cn(
-                                                        'bg-black px-[6px] py-[3px] rounded-md text-primary text-opacity-90 text-[0.9rem]',
-                                                        className
+                                                <div className="relative py-5">
+                                                    {meta && (
+                                                        <div className="text-sm text-gray-500 mb-2">
+                                                            <strong>
+                                                                Command:
+                                                            </strong>{' '}
+                                                            {meta}
+                                                        </div>
                                                     )}
-                                                    {...props}
-                                                >
-                                                    {value}
-                                                </code>
+                                                    <CodeBlock
+                                                        key={Math.random()}
+                                                        value={value}
+                                                        language={lang}
+                                                    />
+                                                </div>
                                             )
-                                        }
-
-                                        const match = /language-(\w+)/.exec(
-                                            className || ''
-                                        )
-                                        const meta = props.meta || ''
-                                        return (
-                                            <div className="relative py-5">
-                                                {meta && (
-                                                    <div className="text-sm text-gray-500 mb-2">
-                                                        <strong>
-                                                            Command:
-                                                        </strong>{' '}
-                                                        {meta}
-                                                    </div>
-                                                )}
-                                                <CodeBlock
-                                                    key={Math.random()}
-                                                    value={value}
-                                                    language={lang}
-                                                />
-                                            </div>
-                                        )
-                                    },
-                                }}
-                            >
-                                {part.content}
-                            </MemoizedReactMarkdown>
-                        )
-                    } else if (part.type === 'yesNoQuestion') {
-                        return (
-                            <YesNoQuestion
-                                key={index}
-                                question={part.content}
-                                onAnswer={answer =>
-                                    onYesNoAnswer &&
-                                    onYesNoAnswer(part.content, answer)
-                                }
-                            />
-                        )
-                    } else if (part.type === 'codeBlock') {
-                        return (
-                            <div key={index} className="relative py-5">
-                                <pre className="text-md mb-2">
-                                    <strong>Command:</strong> {part.command}{' '}
-                                    {part.relativePath}
-                                </pre>
-                                <CodeBlock
-                                    value={part.code}
-                                    fileName={part.fileName}
-                                    language={getLanguageFromFilename(
-                                        part.fileName
-                                    )}
+                                        },
+                                    }}
+                                >
+                                    {part.content}
+                                </MemoizedReactMarkdown>
+                            )
+                        } else if (part.type === 'yesNoQuestion') {
+                            return (
+                                <YesNoQuestion
+                                    key={index}
+                                    question={part.content}
+                                    onAnswer={answer =>
+                                        onYesNoAnswer &&
+                                        onYesNoAnswer(part.content, answer)
+                                    }
                                 />
-                            </div>
-                        )
-                    }
-                })}
+                            )
+                        } else if (part.type === 'codeBlock') {
+                            return (
+                                <div key={index} className="relative py-5">
+                                    <pre className="text-md mb-2">
+                                        <strong>Command:</strong> {part.command}{' '}
+                                        {part.relativePath}
+                                    </pre>
+                                    <CodeBlock
+                                        value={part.code}
+                                        fileName={part.fileName}
+                                        language={getLanguageFromFilename(
+                                            part.fileName
+                                        )}
+                                    />
+                                </div>
+                            )
+                        }
+                    })}
+                </div>
             </div>
         </div>
     )
