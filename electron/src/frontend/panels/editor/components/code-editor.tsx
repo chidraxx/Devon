@@ -433,7 +433,7 @@ export default function CodeEditor({
                     setSelectedFileId={handleFileSelect}
                     onCloseTab={handleCloseTab}
                     className={showEditorBorders ? '' : ''}
-                    isExpandedVariant={isExpandedVariant}
+                    // isExpandedVariant={isExpandedVariant}
                     loading={files.length === 0}
                     diffEnabled={showInlineDiff}
                     setDiffEnabled={setShowInlineDiff}

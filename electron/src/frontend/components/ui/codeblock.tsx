@@ -16,7 +16,7 @@ import {
 } from '@/lib/programming-language-utils'
 
 interface CodeBlockProps {
-    fileName: string
+    fileName?: string
     language: string
     value: string
     path?: string
@@ -227,7 +227,7 @@ const SimpleCodeBlock: FC<SimpleCodeBlockProps> = memo(
             <div className="relative w-full font-sans codeblock bg-zinc-950 rounded-md overflow-hidden border-[1px] border-outlinecolor">
                 <div
                     className={cn(
-                        'flex items-center justify-between w-full pl-3 py-0 pr-1 bg-code-header text-zinc-100 rounded-t-md sticky top-0 z-10',
+                        'flex items-center justify-between w-full pl-3 py-0 pr-1 bg-code-header text-zinc-100 rounded-t-md sticky top-0 z-10'
                         // onClickHeader ? 'cursor-pointer' : 'cursor-default'
                     )}
                     // onClick={onClickHeader}

@@ -7,6 +7,7 @@ import { getLanguageFromFilename } from '@/lib/programming-language-utils'
 import { getFileName } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Check, X } from 'lucide-react'
+import './markdown.css'
 
 const StyledMessage = ({
     content,
@@ -37,7 +38,7 @@ const StyledMessage = ({
                             return (
                                 <MemoizedReactMarkdown
                                     key={index}
-                                    className="prose break-words dark:prose-invert prose-p:leading-relaxed prose-pre:p-0 chat-text-relaxed"
+                                    className="markdown prose break-words dark:prose-invert prose-p:leading-relaxed prose-pre:p-0 chat-text-relaxed"
                                     remarkPlugins={[remarkGfm]}
                                     components={{
                                         p({ children }) {
@@ -72,7 +73,6 @@ const StyledMessage = ({
                                                 return (
                                                     <code
                                                         className={cn(
-                                                            'bg-black px-[6px] py-[3px] rounded-md text-primary text-opacity-90 text-[0.9rem]',
                                                             className
                                                         )}
                                                         {...props}
@@ -120,6 +120,14 @@ const StyledMessage = ({
                                     }
                                 />
                             )
+                        } else if (part.type === 'list') {
+                            return (
+                                <ListDisplay
+                                    key={index}
+                                    content={part.content}
+                                    title={part.title}
+                                />
+                            )
                         } else if (part.type === 'codeBlock') {
                             return (
                                 <div key={index} className="relative py-5">
@@ -130,9 +138,13 @@ const StyledMessage = ({
                                     <CodeBlock
                                         value={part.code}
                                         fileName={part.fileName}
-                                        language={getLanguageFromFilename(
+                                        language={
                                             part.fileName
-                                        )}
+                                                ? getLanguageFromFilename(
+                                                      part.fileName
+                                                  ) ?? 'plaintext'
+                                                : 'plaintext'
+                                        }
                                     />
                                 </div>
                             )
@@ -176,6 +188,24 @@ const parseContent = (content: string) => {
         return after
     }
 
+    const processList = (match, fullText) => {
+        const before = fullText.slice(0, match.index)
+        const after = fullText.slice(match.index + match[0].length)
+
+        if (before.trim()) {
+            contentParts.push({ type: 'markdown', content: before.trim() })
+        }
+
+        const listContent = match[1].trim()
+        const lines = listContent.split('\n').map(item => item.trim())
+        const title = lines[0]
+        const items = lines.slice(1).join('\n')
+
+        contentParts.push({ type: 'list', title, content: items })
+
+        return after
+    }
+
     let remainingContent = content
     while (remainingContent.length > 0) {
         const codeBlockMatch = remainingContent.match(
@@ -184,10 +214,12 @@ const parseContent = (content: string) => {
         const yesNoMatch = remainingContent.match(
             /<YES_NO_QUESTION>([\s\S]*?)<\/YES_NO_QUESTION>/
         )
+        const listMatch = remainingContent.match(/<LIST>([\s\S]*?)<\/LIST>/)
 
         if (
             codeBlockMatch &&
-            (!yesNoMatch || codeBlockMatch.index < yesNoMatch.index)
+            (!yesNoMatch || codeBlockMatch.index < yesNoMatch.index) &&
+            (!listMatch || codeBlockMatch.index < listMatch.index)
         ) {
             pushCurrentText()
             contentParts.push({
@@ -200,11 +232,16 @@ const parseContent = (content: string) => {
             remainingContent = remainingContent.slice(
                 codeBlockMatch.index + codeBlockMatch[0].length
             )
-        } else if (yesNoMatch) {
+        } else if (
+            yesNoMatch &&
+            (!listMatch || yesNoMatch.index < listMatch.index)
+        ) {
             remainingContent = processYesNoQuestion(
                 yesNoMatch,
                 remainingContent
             )
+        } else if (listMatch) {
+            remainingContent = processList(listMatch, remainingContent)
         } else {
             currentText += remainingContent
             remainingContent = ''
@@ -215,6 +252,7 @@ const parseContent = (content: string) => {
 
     return { contentParts }
 }
+
 const YesNoQuestion = ({
     question,
     onAnswer,
@@ -238,9 +276,15 @@ const YesNoQuestion = ({
             >
                 {question}
                 {answered === 'yes' ? (
-                    <Check size={16} className="text-green-500 flex-shrink-0" />
+                    <Check
+                        size={16}
+                        className="ml-auto text-green-500 flex-shrink-0 mt-1"
+                    />
                 ) : answered === 'no' ? (
-                    <X size={16} className="text-red-500 flex-shrink-0" />
+                    <X
+                        size={16}
+                        className="ml-auto text-red-500 flex-shrink-0 mt-1"
+                    />
                 ) : null}
             </p>
             {answered === false && (
@@ -284,6 +328,35 @@ const OutlineButton = ({
         >
             {children}
         </Button>
+    )
+}
+
+const ListDisplay = ({
+    content,
+    title,
+}: {
+    content: string
+    title: string
+}) => {
+    return (
+        <div className="p-4 rounded-lg border-2 border-outlinecolor bg-midnight">
+            {title && (
+                <h3 className="font-semibold mb-3 text-[1.1rem] chat-text-relaxed">
+                    {title}
+                </h3>
+            )}
+            <MemoizedReactMarkdown
+                className="markdown chat-text-relaxed"
+                remarkPlugins={[remarkGfm]}
+                components={{
+                    p: ({ node, ...props }) => (
+                        <p className="whitespace-pre-wrap" {...props} />
+                    ),
+                }}
+            >
+                {content}
+            </MemoizedReactMarkdown>
+        </div>
     )
 }
 
