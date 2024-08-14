@@ -82,7 +82,7 @@ export default function Sidebar({
                     : showMinimizedTimeline
                     ? 'rounded-r-lg border-none'
                     : 'rounded-r-lg border'
-            } hidden md:block`}
+            } hidden md:flex`}
         >
             <nav
                 className={`h-full flex flex-col border-outlinecolor bg-midnight ${
